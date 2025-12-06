@@ -1,0 +1,32 @@
+# QWEN Server Configuration
+
+model:
+  # Model selection - switch between sizes as needed
+  name: "Qwen/Qwen2-VL-2B-Instruct"  # Options: Qwen2-VL-2B-Instruct, Qwen2-VL-7B-Instruct
+  device: "cuda"                      # Options: cuda, cpu
+  dtype: "float16"                    # Options: float16, float32
+  cache_dir: "~/.cache/huggingface"
+  max_length: 512                     # Max tokens for generation
+  
+server:
+  host: "0.0.0.0"
+  port: 8000
+  api_key: "helloagorevski"           # Hardcoded API key for authentication
+  workers: 1                          # Uvicorn workers (increase for production)
+  reload: false                       # Auto-reload on code changes (dev only)
+  
+processing:
+  max_batch_size: 10                  # Maximum shots per batch request
+  timeout_seconds: 60                 # Request timeout
+  enable_audio_fusion: true           # Integrate audio features into analysis
+  temporal_weight: 0.3                # Weight for temporal progression (0-1)
+  audio_weight: 0.2                   # Weight for audio features (0-1)
+  
+attributes:
+  # Genre attribute weights for scoring
+  suspense: 1.0
+  darkness: 1.0
+  ambiguity: 1.0
+  emotional_tension: 1.0
+  intensity: 1.0
+  motion: 1.0
