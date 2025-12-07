@@ -1,0 +1,175 @@
+# Genre-specific profiles for trailer generation
+
+thriller:
+  scoring_weights:
+    suspense: 0.35
+    ambiguity: 0.25
+    emotional_tension: 0.20
+    darkness: 0.20
+  
+  color_grade:
+    filter: "eq=contrast=1.2:brightness=-0.05:saturation=0.7,curves=all='0/0 0.5/0.4 1/1'"
+    description: "Low-key, desaturated with lifted shadows"
+  
+  music_tags:
+    - tension
+    - ambient
+    - dark
+    - suspenseful
+  
+  pacing: "slow_build_to_fast"
+  
+  text_overlay_style:
+    font: "Impact"
+    color: "white"
+    shadow: true
+    animation: "fade"
+
+action:
+  scoring_weights:
+    intensity: 0.40
+    motion: 0.30
+    impact: 0.20
+    energy: 0.10
+  
+  color_grade:
+    filter: "eq=contrast=1.3:saturation=1.2:brightness=0.05,unsharp=5:5:1.0"
+    description: "High contrast, boosted saturation, sharpened"
+  
+  music_tags:
+    - epic
+    - energetic
+    - powerful
+    - percussion
+  
+  pacing: "fast_throughout"
+  
+  text_overlay_style:
+    font: "Arial Bold"
+    color: "white"
+    shadow: true
+    animation: "quick_cut"
+
+drama:
+  scoring_weights:
+    emotional_connection: 0.50
+    intimacy: 0.30
+    warmth: 0.20
+  
+  color_grade:
+    filter: "eq=contrast=1.1:saturation=0.9,curves=all='0/0.1 0.5/0.5 1/0.9'"
+    description: "Soft contrast, warm tones"
+  
+  music_tags:
+    - emotional
+    - piano
+    - strings
+    - intimate
+  
+  pacing: "measured"
+  
+  text_overlay_style:
+    font: "Georgia"
+    color: "white"
+    shadow: false
+    animation: "slow_fade"
+
+horror:
+  scoring_weights:
+    fear: 0.40
+    darkness: 0.30
+    unease: 0.20
+    shock: 0.10
+  
+  color_grade:
+    filter: "eq=contrast=1.4:brightness=-0.10:saturation=0.6,colortemperature=3000"
+    description: "Very dark, cold blue tones"
+  
+  music_tags:
+    - ominous
+    - dissonant
+    - dread
+    - silence
+  
+  pacing: "slow_build_with_shocks"
+  
+  text_overlay_style:
+    font: "Courier New"
+    color: "red"
+    shadow: true
+    animation: "glitch"
+
+scifi:
+  scoring_weights:
+    futuristic: 0.35
+    technology: 0.25
+    wonder: 0.20
+    scale: 0.20
+  
+  color_grade:
+    filter: "eq=contrast=1.2:saturation=1.1,curves=blue='0/0.1 1/1',colortemperature=6500"
+    description: "Cool tones, slight blue push"
+  
+  music_tags:
+    - electronic
+    - atmospheric
+    - futuristic
+    - epic
+  
+  pacing: "varied"
+  
+  text_overlay_style:
+    font: "Helvetica"
+    color: "cyan"
+    shadow: true
+    animation: "digital"
+
+comedy:
+  scoring_weights:
+    humor: 0.40
+    energy: 0.30
+    lightheartedness: 0.20
+    timing: 0.10
+  
+  color_grade:
+    filter: "eq=contrast=1.0:saturation=1.15:brightness=0.05"
+    description: "Bright, vibrant colors"
+  
+  music_tags:
+    - upbeat
+    - playful
+    - quirky
+    - energetic
+  
+  pacing: "quick_and_punchy"
+  
+  text_overlay_style:
+    font: "Comic Sans MS"
+    color: "yellow"
+    shadow: true
+    animation: "bounce"
+
+romance:
+  scoring_weights:
+    emotional_connection: 0.40
+    intimacy: 0.30
+    warmth: 0.20
+    beauty: 0.10
+  
+  color_grade:
+    filter: "eq=contrast=1.0:saturation=1.1,curves=all='0/0 0.5/0.55 1/1',colortemperature=5500"
+    description: "Soft, warm, slightly lifted"
+  
+  music_tags:
+    - romantic
+    - piano
+    - orchestral
+    - tender
+  
+  pacing: "flowing"
+  
+  text_overlay_style:
+    font: "Brush Script MT"
+    color: "white"
+    shadow: false
+    animation: "elegant_fade"

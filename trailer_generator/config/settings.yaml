@@ -1,0 +1,70 @@
+# Automated Trailer Generator Configuration
+
+project:
+  name: "Automated Trailer Generator"
+  output_dir: "output/"
+  temp_dir: "temp/"
+
+# Processing settings
+processing:
+  target_trailer_length: 90  # seconds
+  shot_candidate_count: 60
+  max_batch_size: 10  # shots per batch
+  chunk_duration: 30  # seconds for shot detection
+  overlap: 5  # seconds overlap between chunks
+
+# Shot detection
+shot_detection:
+  threshold: 27.0  # PySceneDetect content threshold
+  min_shot_duration: 0.5  # seconds
+  max_shot_duration: 10.0  # seconds
+
+# Keyframe extraction
+keyframe:
+  quality: 95  # JPEG quality (1-100)
+  method: "middle"  # middle, best, or multiple
+
+# Remote analysis (Qwen2-VL server)
+remote_analysis:
+  qwen_server_url: "http://localhost:8000"
+  api_key: "helloagorevski"  # API key for qwen_server authentication
+  timeout: 30
+  max_retries: 3
+  batch_size: 10
+  cache_enabled: true
+  cache_path: "cache/"
+
+# Azure OpenAI
+azure_openai:
+  endpoint: "https://yourendpoint.openai.azure.com/"
+  # api_key: "${AZURE_OPENAI_KEY}"  # Use environment variable
+  api_key: "your_key"  # API key for Azure OpenAI
+  deployment_name: "gpt-5.1"
+  api_version: "2025-01-01-preview"
+  max_retries: 3
+  temperature: 0.7
+  max_completion_tokens: 4000  # Maximum tokens for completion
+
+# Video settings
+video:
+  resolution: "1920x1080"
+  fps: 24
+  codec: "libx264"
+  bitrate: "5000k"
+  preset: "medium"
+
+# Audio settings
+audio:
+  music_library_path: "audio_assets/"
+  output_format: "aac"
+  sample_rate: 48000
+  bitrate: "192k"
+
+# Genre selection (default)
+genre: "thriller"
+
+# Logging
+logging:
+  level: "INFO"
+  file: "trailer_generator.log"
+  console: true
