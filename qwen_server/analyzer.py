@@ -35,6 +35,11 @@ class MultimodalAnalyzer:
         self.temporal_weight = config['processing']['temporal_weight']
         self.audio_weight = config['processing']['audio_weight']
         self.max_length = config['model'].get('max_length', 512)
+        
+        # Video processing configuration
+        self.use_native_video = config['processing'].get('use_native_video', False)
+        self.video_max_frames = config['processing'].get('video_max_frames', 16)
+        self.video_fps_sampling = config['processing'].get('video_fps_sampling', 1.0)
     
     def analyze_shot(self, shot_data: Dict) -> Dict:
         """
@@ -42,7 +47,8 @@ class MultimodalAnalyzer:
         
         Args:
             shot_data: Dictionary containing:
-                - images: List of base64 encoded images
+                - images: List of base64 encoded images (for keyframe mode)
+                - video: Base64 encoded video file (for video mode)
                 - audio_features: Audio feature dictionary (optional)
                 - shot_id: Shot identifier
                 - start_time, end_time, duration: Timing info
@@ -51,15 +57,19 @@ class MultimodalAnalyzer:
             Dictionary with caption and genre attributes
         """
         try:
-            # Decode images
-            images = self._decode_images(shot_data.get('images', []))
-            
-            if not images:
-                logger.warning(f"No valid images for shot {shot_data.get('shot_id')}")
-                return self._empty_analysis()
-            
-            # Analyze visual content
-            visual_analysis = self._analyze_visual(images)
+            # Check if video mode and video data provided
+            if self.use_native_video and shot_data.get('video'):
+                visual_analysis = self._analyze_video(shot_data)
+            else:
+                # Decode images for keyframe mode
+                images = self._decode_images(shot_data.get('images', []))
+                
+                if not images:
+                    logger.warning(f"No valid images for shot {shot_data.get('shot_id')}")
+                    return self._empty_analysis()
+                
+                # Analyze visual content from keyframes
+                visual_analysis = self._analyze_visual(images)
             
             # Integrate audio if available
             if self.enable_audio_fusion and shot_data.get('audio_features'):
@@ -70,7 +80,8 @@ class MultimodalAnalyzer:
             
             return {
                 'caption': visual_analysis['caption'],
-                'attributes': attributes
+                'attributes': attributes,
+                'processing_mode': 'video' if self.use_native_video and shot_data.get('video') else 'keyframes'
             }
             
         except Exception as e:
@@ -98,6 +109,132 @@ class MultimodalAnalyzer:
                 continue
         
         return images
+    
+    def _analyze_video(self, shot_data: Dict) -> Dict:
+        """
+        Analyze a video clip using Qwen2-VL native video processing.
+        
+        Args:
+            shot_data: Dictionary containing video data and metadata
+            
+        Returns:
+            Dictionary with caption and attributes
+        """
+        try:
+            # Decode base64 video to bytes
+            video_b64 = shot_data.get('video', '')
+            video_bytes = base64.b64decode(video_b64)
+            
+            # Save temporarily to process (Qwen2-VL expects file path or PIL frames)
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.mp4', delete=False) as tmp_video:
+                tmp_video.write(video_bytes)
+                video_path = tmp_video.name
+            
+            try:
+                # Create prompt for genre attribute extraction
+                prompt = """Analyze this film scene and provide:
+1. A brief description of what's happening across the entire clip
+2. Rate the following attributes from 0.0 to 1.0:
+   - Suspense: Level of tension or anticipation
+   - Darkness: Visual darkness and mood
+   - Ambiguity: Unclear or mysterious elements
+   - Emotional tension: Character stress or conflict
+   - Intensity: Overall energy and impact
+   - Motion: Amount of movement or action
+
+Respond in this format:
+Description: [your description]
+Suspense: [0.0-1.0]
+Darkness: [0.0-1.0]
+Ambiguity: [0.0-1.0]
+Emotional_tension: [0.0-1.0]
+Intensity: [0.0-1.0]
+Motion: [0.0-1.0]"""
+                
+                # Calculate optimal FPS to stay within frame limit
+                duration = shot_data.get('duration', 10.0)
+                fps = self.video_fps_sampling if self.video_fps_sampling else 1.0
+                estimated_frames = int(duration * fps)
+                
+                # Adjust FPS if we'd exceed max frames
+                if estimated_frames > self.video_max_frames:
+                    fps = self.video_max_frames / duration
+                    logger.info(f"Adjusting FPS from {self.video_fps_sampling} to {fps:.2f} to stay within {self.video_max_frames} frame limit")
+                
+                # Prepare input with video
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "video",
+                                "video": video_path,
+                                "max_pixels": 360 * 420,  # Qwen2-VL video resolution limit
+                                "fps": fps,
+                                "nframes": self.video_max_frames  # Explicitly limit frames
+                            },
+                            {"type": "text", "text": prompt}
+                        ]
+                    }
+                ]
+                
+                # Process with model
+                text = self.processor.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
+                image_inputs, video_inputs = process_vision_info(messages)
+                
+                inputs = self.processor(
+                    text=[text],
+                    images=None,
+                    videos=video_inputs if video_inputs else None,
+                    padding=True,
+                    return_tensors="pt"
+                )
+                
+                # Move to device
+                inputs = inputs.to(self.model.device)
+                
+                # Generate
+                logger.info(f"Processing video clip (duration: {shot_data.get('duration', 0):.2f}s) with native video mode")
+                with torch.no_grad():
+                    outputs = self.model.generate(
+                        **inputs,
+                        max_new_tokens=256,
+                        do_sample=False
+                    )
+                
+                # Decode response
+                output_ids = outputs[:, inputs.input_ids.shape[1]:]
+                generated_texts = self.processor.batch_decode(
+                    output_ids,
+                    skip_special_tokens=True,
+                    clean_up_tokenization_spaces=False
+                )
+                
+                if not generated_texts or len(generated_texts) == 0:
+                    logger.warning("Video analysis: batch_decode returned empty, using default")
+                    return self._default_frame_analysis()
+                
+                # Parse response
+                result = self._parse_model_output(generated_texts[0])
+                logger.info(f"Video analysis completed: {result['caption'][:50]}...")
+                return result
+                
+            finally:
+                # Clean up temporary file
+                import os
+                try:
+                    os.unlink(video_path)
+                except:
+                    pass
+                    
+        except Exception as e:
+            import traceback
+            logger.error(f"Error in video analysis: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            return self._default_frame_analysis()
     
     def _analyze_visual(self, images: List[Image.Image]) -> Dict:
         """
@@ -193,7 +330,7 @@ Motion: [0.0-1.0]"""
             inputs = self.processor(
                 text=[text],
                 images=image_inputs,
-                videos=video_inputs,
+                videos=None,  # We only process images, not videos
                 padding=True,
                 return_tensors="pt"
             )
@@ -210,17 +347,33 @@ Motion: [0.0-1.0]"""
                 )
             
             # Decode response
-            generated_text = self.processor.batch_decode(
-                outputs[:, inputs.input_ids.shape[1]:],
+            output_ids = outputs[:, inputs.input_ids.shape[1]:]
+            
+            # Add debug logging
+            logger.debug(f"Output shape: {outputs.shape}, Input shape: {inputs.input_ids.shape}")
+            logger.debug(f"Output IDs shape: {output_ids.shape}")
+            
+            generated_texts = self.processor.batch_decode(
+                output_ids,
                 skip_special_tokens=True,
                 clean_up_tokenization_spaces=False
-            )[0]
+            )
+            
+            # Check if decoding produced any results
+            if not generated_texts or len(generated_texts) == 0:
+                logger.warning("batch_decode returned empty list, using default analysis")
+                return self._default_frame_analysis()
+            
+            # Get first result (should only be one in batch)
+            generated_text = generated_texts[0]
             
             # Parse response
             return self._parse_model_output(generated_text)
             
         except Exception as e:
+            import traceback
             logger.error(f"Error in single frame analysis: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return self._default_frame_analysis()
     
     def _parse_model_output(self, text: str) -> Dict:

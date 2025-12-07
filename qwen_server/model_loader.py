@@ -90,6 +90,13 @@ class ModelLoader:
             # Set to eval mode
             self.model.eval()
             
+            # Configure generation to avoid warnings
+            if hasattr(self.model, 'generation_config'):
+                self.model.generation_config.temperature = None
+                self.model.generation_config.top_p = None
+                self.model.generation_config.top_k = None
+                self.model.generation_config.do_sample = False
+            
             logger.info("Model loaded successfully!")
             
             # Log model size

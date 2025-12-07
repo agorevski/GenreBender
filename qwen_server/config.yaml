@@ -2,7 +2,7 @@
 
 model:
   # Model selection - switch between sizes as needed
-  name: "Qwen/Qwen2-VL-2B-Instruct"  # Options: Qwen2-VL-2B-Instruct, Qwen2-VL-7B-Instruct
+  name: "Qwen/Qwen2-VL-7B-Instruct"  # Options: Qwen2-VL-2B-Instruct, Qwen2-VL-7B-Instruct
   device: "cuda"                      # Options: cuda, cpu
   dtype: "float16"                    # Options: float16, float32
   cache_dir: "~/.cache/huggingface"
@@ -21,6 +21,11 @@ processing:
   enable_audio_fusion: true           # Integrate audio features into analysis
   temporal_weight: 0.3                # Weight for temporal progression (0-1)
   audio_weight: 0.2                   # Weight for audio features (0-1)
+  
+  # Video processing mode
+  use_native_video: true              # Use native video input instead of keyframes
+  video_max_frames: 8                 # Max frames for video mode (lower = faster, less tokens)
+  video_fps_sampling: 0.5             # FPS for video sampling (0.5 = 1 frame per 2 seconds)
   
 attributes:
   # Genre attribute weights for scoring

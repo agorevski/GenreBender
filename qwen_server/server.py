@@ -75,7 +75,8 @@ app = FastAPI(
 # Pydantic models for request/response
 class ShotAnalysisRequest(BaseModel):
     shot_id: int = Field(..., description="Shot identifier")
-    images: List[str] = Field(..., description="List of base64 encoded images")
+    images: Optional[List[str]] = Field(None, description="List of base64 encoded images (keyframe mode)")
+    video: Optional[str] = Field(None, description="Base64 encoded video file (video mode)")
     audio_features: Optional[Dict] = Field(None, description="Audio features dictionary")
     start_time: float = Field(..., description="Shot start time in seconds")
     end_time: float = Field(..., description="Shot end time in seconds")
@@ -174,11 +175,20 @@ async def analyze_shot(
         Analysis result with caption and attribute scores
     """
     try:
-        # Validate request
-        if not request.images:
-            raise HTTPException(status_code=400, detail="No images provided")
+        # Validate request - must have either images or video
+        if not request.images and not request.video:
+            raise HTTPException(
+                status_code=400, 
+                detail="Must provide either 'images' (for keyframe mode) or 'video' (for video mode)"
+            )
         
-        if len(request.images) > 10:
+        if request.images and request.video:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot provide both 'images' and 'video' - choose one mode"
+            )
+        
+        if request.images and len(request.images) > 10:
             raise HTTPException(
                 status_code=400, 
                 detail="Too many images (max 10 per shot)"
@@ -188,7 +198,8 @@ async def analyze_shot(
         shot_data = request.dict()
         result = analyzer.analyze_shot(shot_data)
         
-        logger.info(f"Analyzed shot {request.shot_id}")
+        processing_mode = result.get('processing_mode', 'keyframes')
+        logger.info(f"Analyzed shot {request.shot_id} using {processing_mode} mode")
         
         return result
         
@@ -223,6 +234,45 @@ async def analyze_batch(
                 status_code=400,
                 detail=f"Batch size exceeds maximum ({max_batch_size})"
             )
+        
+        # Validate each shot before processing
+        validation_errors = []
+        logger.info(f"Validating batch of {len(request.shots)} shots")
+        
+        for idx, shot_request in enumerate(request.shots):
+            shot_id = shot_request.shot_id
+            has_images = shot_request.images is not None
+            has_video = shot_request.video is not None
+            images_count = len(shot_request.images) if shot_request.images else 0
+            
+            logger.debug(f"Shot {shot_id} (idx {idx}): has_images={has_images}, has_video={has_video}, images_count={images_count}")
+            
+            # Check that shot has either images or video
+            if not shot_request.images and not shot_request.video:
+                error = f"Shot {shot_id} (index {idx}): Must provide either 'images' or 'video'"
+                validation_errors.append(error)
+                logger.warning(error)
+            elif shot_request.images and shot_request.video:
+                error = f"Shot {shot_id} (index {idx}): Cannot provide both 'images' and 'video'"
+                validation_errors.append(error)
+                logger.warning(error)
+            elif shot_request.images and len(shot_request.images) == 0:
+                error = f"Shot {shot_id} (index {idx}): 'images' array is empty"
+                validation_errors.append(error)
+                logger.warning(error)
+            elif shot_request.images and len(shot_request.images) > 10:
+                error = f"Shot {shot_id} (index {idx}): Too many images ({len(shot_request.images)}, max 10 per shot)"
+                validation_errors.append(error)
+                logger.warning(error)
+        
+        if validation_errors:
+            error_msg = f"Batch validation failed with {len(validation_errors)} errors:\n" + "\n".join(validation_errors[:5])
+            if len(validation_errors) > 5:
+                error_msg += f"\n... and {len(validation_errors) - 5} more errors"
+            logger.error(error_msg)
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        logger.info(f"Batch validation passed for {len(request.shots)} shots")
         
         # Analyze each shot
         results = []

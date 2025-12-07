@@ -36,10 +36,11 @@ create_venv=${create_venv:-Y}
 
 if [[ $create_venv =~ ^[Yy]$ ]]; then
     echo "Creating virtual environment..."
-    python3 -m venv venv
-    source venv/bin/activate
+    python3 -m venv venv_qwen_server
+    source venv_qwen_server/bin/activate
     echo "Virtual environment activated"
 fi
+
 
 # Upgrade pip
 echo ""
@@ -51,7 +52,7 @@ echo ""
 echo "Installing PyTorch..."
 if command -v nvidia-smi &> /dev/null; then
     echo "Installing PyTorch with CUDA support..."
-    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 else
     echo "Installing PyTorch (CPU only)..."
     pip install torch torchvision

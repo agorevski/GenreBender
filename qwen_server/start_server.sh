@@ -2,8 +2,8 @@
 # Start QWEN server
 
 # Activate virtual environment if it exists
-if [ -d "venv" ]; then
-    source venv/bin/activate
+if [ -d "venv_qwen_server" ]; then
+    source venv_qwen_server/bin/activate
     echo "Virtual environment activated"
 fi
 
