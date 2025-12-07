@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from trailer_generator.ingest import ShotDetector, KeyframeExtractor, BatchProcessor, AudioExtractor
 from trailer_generator.analysis import RemoteAnalyzer, AnalysisCache, GenreScorer, ShotSelector
 from trailer_generator.narrative import AzureOpenAIClient, TimelineGenerator
+from trailer_generator.checkpoint import CheckpointManager, load_shots_from_metadata, save_shots_to_metadata
 import shutil
 
 # Load environment variables
@@ -103,6 +104,10 @@ def main():
     parser.add_argument('--test', action='store_true', help='Run in test mode with sample validation')
     parser.add_argument('--skip-analysis', action='store_true', help='Skip remote analysis (use cached results)')
     parser.add_argument('--no-cache', action='store_true', help='Disable analysis caching')
+    parser.add_argument('--resume-from', type=str, choices=['shot_detection', 'keyframe_extraction', 'audio_extraction', 'remote_analysis', 'genre_scoring', 'shot_selection', 'narrative_generation'], help='Resume from specific stage')
+    parser.add_argument('--skip-clean', action='store_true', help='Skip cleaning output directory (useful for resume)')
+    parser.add_argument('--force-stage', type=str, choices=['shot_detection', 'keyframe_extraction', 'audio_extraction', 'remote_analysis', 'genre_scoring', 'shot_selection', 'narrative_generation'], help='Force re-run of specific stage')
+    parser.add_argument('--reset-checkpoint', action='store_true', help='Reset checkpoint and start fresh')
     args = parser.parse_args()
     for key, value in vars(args).items():
         print(f"Args:\t{key}: {value}")
@@ -132,24 +137,49 @@ def main():
     output_base = get_output_base_dir(args.input)
     logger.info(f"Output directory: {output_base}")
     
-    # Clean output directory if it exists
-    if output_base.exists():
-        logger.info(f"Cleaning existing output directory: {output_base}")
-        shutil.rmtree(output_base)
-        logger.info(f"Removed existing directory: {output_base}")
-    
     # Define output subdirectories
     shots_dir = output_base / 'shots'
     keyframes_dir = output_base / 'keyframes'
+    cache_dir = output_base / 'cache'
     output_dir = output_base / 'output'
     temp_dir = output_base / 'temp'
     log_file = output_base / 'trailer_generator.log'
+    checkpoint_file = output_base / 'checkpoint.json'
+    
+    # Initialize checkpoint manager
+    checkpoint = CheckpointManager(checkpoint_file)
+    
+    # Handle checkpoint reset
+    if args.reset_checkpoint:
+        logger.info("Resetting checkpoint...")
+        checkpoint.reset()
+        if output_base.exists() and not args.skip_clean:
+            logger.info(f"Cleaning output directory: {output_base}")
+            shutil.rmtree(output_base)
+    
+    # Handle directory cleaning
+    if not args.skip_clean and not args.resume_from:
+        if output_base.exists():
+            logger.info(f"Cleaning existing output directory: {output_base}")
+            shutil.rmtree(output_base)
+            logger.info(f"Removed existing directory: {output_base}")
+            checkpoint.reset()
+    elif args.resume_from:
+        logger.info(f"Resume mode: Preserving existing output directory")
+        # Validate resume
+        if not checkpoint.validate_resume(args.resume_from, args.input, args.genre):
+            logger.error("Resume validation failed. Use --reset-checkpoint to start fresh.")
+            sys.exit(1)
     
     # Create output directories
     shots_dir.mkdir(parents=True, exist_ok=True)
     keyframes_dir.mkdir(parents=True, exist_ok=True)
+    cache_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
     temp_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Set checkpoint metadata
+    checkpoint.set_metadata(args.input, args.genre)
     
     # Update config with dynamic paths
     config['project']['output_dir'] = str(output_dir)
@@ -171,75 +201,101 @@ def main():
     logger = logging.getLogger(__name__)
     logger.info(f"Logging to: {log_file}")
     
+    # Determine shot metadata path
+    shot_metadata_path = shots_dir / 'shot_metadata.json'
+    
     # ========== STEP 1: SHOT DETECTION ==========
     logger.info("=" * 60)
     logger.info("STEP 1: Shot Detection")
     logger.info("=" * 60)
     
-    detector = ShotDetector(
-        threshold=config['shot_detection']['threshold'],
-        chunk_duration=config['processing']['chunk_duration'],
-        overlap=config['processing']['overlap'],
-        output_dir=str(shots_dir)
-    )
-    
-    shots = detector.detect_shots(args.input, streaming=True)
-    logger.info(f"Detected {len(shots)} shots")
-    
-    # Limit to first 5 shots in test mode
-    if args.test:
-        original_count = len(shots)
-        shots = shots[:5]
-        logger.info(f"TEST MODE: Limited from {original_count} to {len(shots)} shots")
+    force_shot_detection = args.force_stage == 'shot_detection'
+    if checkpoint.should_skip_stage('shot_detection', force=force_shot_detection):
+        logger.info("⏭️  Skipping shot detection (already completed)")
+        shots = load_shots_from_metadata(shot_metadata_path)
+        if not shots:
+            logger.error("Failed to load shots from metadata. Cannot skip this stage.")
+            sys.exit(1)
+    else:
+        detector = ShotDetector(
+            threshold=config['shot_detection']['threshold'],
+            chunk_duration=config['processing']['chunk_duration'],
+            overlap=config['processing']['overlap'],
+            output_dir=str(shots_dir)
+        )
+        
+        shots = detector.detect_shots(args.input, streaming=True)
+        logger.info(f"Detected {len(shots)} shots")
+        
+        # Limit to first 5 shots in test mode
+        if args.test:
+            original_count = len(shots)
+            shots = shots[:5]
+            logger.info(f"TEST MODE: Limited from {original_count} to {len(shots)} shots")
+        
+        # Save and checkpoint
+        save_shots_to_metadata(shots, shot_metadata_path, args.input)
+        checkpoint.mark_stage_completed('shot_detection', {'shots_count': len(shots)})
     
     # ========== STEP 2: KEYFRAME EXTRACTION ==========
     logger.info("=" * 60)
     logger.info("STEP 2: Keyframe Extraction (Multiple Frames)")
     logger.info("=" * 60)
     
-    extractor = KeyframeExtractor(
-        output_dir=str(keyframes_dir),
-        quality=config['keyframe']['quality']
-    )
-    
-    # Extract 5 frames per shot for temporal analysis
-    shots = extractor.extract_keyframes(args.input, shots, num_frames=5)
-    logger.info(f"Extracted keyframes for {sum(1 for s in shots if s.get('keyframes'))} shots")
+    force_keyframe = args.force_stage == 'keyframe_extraction'
+    if checkpoint.should_skip_stage('keyframe_extraction', force=force_keyframe):
+        logger.info("⏭️  Skipping keyframe extraction (already completed)")
+        shots = load_shots_from_metadata(shot_metadata_path)
+    else:
+        extractor = KeyframeExtractor(
+            output_dir=str(keyframes_dir),
+            quality=config['keyframe']['quality']
+        )
+        
+        # Extract 5 frames per shot for temporal analysis
+        shots = extractor.extract_keyframes(args.input, shots, num_frames=5)
+        logger.info(f"Extracted keyframes for {sum(1 for s in shots if s.get('keyframes'))} shots")
+        
+        # Save and checkpoint
+        save_shots_to_metadata(shots, shot_metadata_path, args.input)
+        checkpoint.mark_stage_completed('keyframe_extraction', {
+            'frames_extracted': sum(len(s.get('keyframes', [])) for s in shots)
+        })
     
     # ========== STEP 3: AUDIO FEATURE EXTRACTION ==========
     logger.info("=" * 60)
     logger.info("STEP 3: Audio Feature Extraction (MFCC & Spectral)")
     logger.info("=" * 60)
     
-    audio_extractor = AudioExtractor(
-        sample_rate=22050,
-        n_mfcc=13
-    )
-    
-    shots = audio_extractor.extract_audio_features(args.input, shots)
-    logger.info(f"Extracted audio features for {sum(1 for s in shots if s.get('audio_features'))} shots")
-    
-    # Save shot metadata with audio features
-    shot_metadata = {
-        'source_video': args.input,
-        'total_shots': len(shots),
-        'shots': shots
-    }
-    
-    shot_metadata_path = shots_dir / 'shot_metadata.json'
-    with open(shot_metadata_path, 'w') as f:
-        json.dump(shot_metadata, f, indent=2)
-    logger.info(f"Saved shot metadata with audio features to {shot_metadata_path}")
+    force_audio = args.force_stage == 'audio_extraction'
+    if checkpoint.should_skip_stage('audio_extraction', force=force_audio):
+        logger.info("⏭️  Skipping audio extraction (already completed)")
+        shots = load_shots_from_metadata(shot_metadata_path)
+    else:
+        audio_extractor = AudioExtractor(
+            sample_rate=22050,
+            n_mfcc=13
+        )
+        
+        shots = audio_extractor.extract_audio_features(args.input, shots)
+        logger.info(f"Extracted audio features for {sum(1 for s in shots if s.get('audio_features'))} shots")
+        
+        # Save and checkpoint
+        save_shots_to_metadata(shots, shot_metadata_path, args.input)
+        checkpoint.mark_stage_completed('audio_extraction', {
+            'features_extracted': sum(1 for s in shots if s.get('audio_features'))
+        })
     
     # ========== STEP 4: REMOTE ANALYSIS ==========
-    if not args.skip_analysis:
-        logger.info("=" * 60)
-        logger.info("STEP 4: Multimodal Analysis (Qwen2-VL)")
-        logger.info("=" * 60)
+    force_analysis = args.force_stage == 'remote_analysis'
+    logger.info("=" * 60)
+    logger.info("STEP 4: Multimodal Analysis (Qwen2-VL)")
+    logger.info("=" * 60)
+    if not args.skip_analysis and not checkpoint.should_skip_stage('remote_analysis', force=force_analysis):
         
         # Initialize cache
         cache = AnalysisCache(
-            cache_dir=config['remote_analysis']['cache_path'],
+            cache_dir=str(cache_dir),
             enabled=not args.no_cache
         )
         
@@ -286,58 +342,119 @@ def main():
             shots = cached_shots + analyzed_shots
         else:
             shots = cached_shots
+        
+        # Save and checkpoint
+        save_shots_to_metadata(shots, shot_metadata_path, args.input)
+        checkpoint.mark_stage_completed('remote_analysis', {
+            'analyzed_count': sum(1 for s in shots if s.get('analysis'))
+        })
+    elif checkpoint.should_skip_stage('remote_analysis', force=force_analysis):
+        logger.info("⏭️  Skipping remote analysis (already completed)")
+        shots = load_shots_from_metadata(shot_metadata_path)
     else:
-        logger.info("Skipping analysis (using cached results)")
+        logger.info("Skipping analysis (--skip-analysis flag)")
     
     # ========== STEP 5: GENRE SCORING ==========
     logger.info("=" * 60)
     logger.info("STEP 5: Genre-Based Scoring")
     logger.info("=" * 60)
     
-    scorer = GenreScorer(genre_profile['scoring_weights'])
-    shots = scorer.score_shots(shots)
+    force_scoring = args.force_stage == 'genre_scoring'
+    if checkpoint.should_skip_stage('genre_scoring', force=force_scoring):
+        logger.info("⏭️  Skipping genre scoring (already completed)")
+        shots = load_shots_from_metadata(shot_metadata_path)
+    else:
+        scorer = GenreScorer(genre_profile['scoring_weights'])
+        shots = scorer.score_shots(shots)
+        
+        # Save and checkpoint
+        save_shots_to_metadata(shots, shot_metadata_path, args.input)
+        checkpoint.mark_stage_completed('genre_scoring', {
+            'scored_count': sum(1 for s in shots if 'genre_score' in s)
+        })
     
     # ========== STEP 6: SHOT SELECTION ==========
     logger.info("=" * 60)
     logger.info("STEP 6: Shot Selection")
     logger.info("=" * 60)
     
-    selector = ShotSelector(
-        target_count=config['processing']['shot_candidate_count']
-    )
-    
-    top_shots = selector.select_top_shots(shots)
-    logger.info(f"Selected {len(top_shots)} top shots for trailer")
+    force_selection = args.force_stage == 'shot_selection'
+    if checkpoint.should_skip_stage('shot_selection', force=force_selection):
+        logger.info("⏭️  Skipping shot selection (already completed)")
+        # Load top shots from saved file
+        top_shots_path = output_dir / 'selected_shots.json'
+        if top_shots_path.exists():
+            with open(top_shots_path, 'r') as f:
+                top_shots = json.load(f)
+            logger.info(f"Loaded {len(top_shots)} selected shots from cache")
+        else:
+            # Fallback: re-run selection
+            selector = ShotSelector(
+                target_count=config['processing']['shot_candidate_count']
+            )
+            top_shots = selector.select_top_shots(shots)
+    else:
+        selector = ShotSelector(
+            target_count=config['processing']['shot_candidate_count']
+        )
+        top_shots = selector.select_top_shots(shots)
+        logger.info(f"Selected {len(top_shots)} top shots for trailer")
+        
+        # Save top shots
+        top_shots_path = output_dir / 'selected_shots.json'
+        with open(top_shots_path, 'w') as f:
+            json.dump(top_shots, f, indent=2)
+        
+        checkpoint.mark_stage_completed('shot_selection', {
+            'selected_count': len(top_shots)
+        })
     
     # ========== STEP 7: NARRATIVE GENERATION ==========
     logger.info("=" * 60)
     logger.info("STEP 7: Narrative Structure Generation (Azure OpenAI)")
     logger.info("=" * 60)
     
-    azure_client = AzureOpenAIClient(
-        endpoint=config['azure_openai']['endpoint'],
-        api_key=config['azure_openai']['api_key'],
-        deployment_name=config['azure_openai']['deployment_name'],
-        api_version=config['azure_openai']['api_version'],
-        max_retries=config['azure_openai']['max_retries'],
-        temperature=config['azure_openai']['temperature'],
-        max_completion_tokens=config['azure_openai']['max_completion_tokens']
-    )
-    
-    timeline_gen = TimelineGenerator(
-        azure_client=azure_client,
-        genre=args.genre
-    )
-    
-    timeline = timeline_gen.generate_timeline(
-        top_shots,
-        target_duration=config['processing']['target_trailer_length']
-    )
-    
-    # Export timeline
     timeline_path = output_dir / 'timeline.json'
-    timeline_gen.export_timeline(timeline, str(timeline_path))
-    logger.info(f"Generated timeline with {len(timeline['timeline'])} shots")
+    force_narrative = args.force_stage == 'narrative_generation'
+    
+    if checkpoint.should_skip_stage('narrative_generation', force=force_narrative):
+        logger.info("⏭️  Skipping narrative generation (already completed)")
+        if timeline_path.exists():
+            with open(timeline_path, 'r') as f:
+                timeline = json.load(f)
+            logger.info(f"Loaded timeline with {len(timeline.get('timeline', []))} shots")
+        else:
+            logger.error("Timeline file not found. Cannot skip this stage.")
+            sys.exit(1)
+    else:
+        azure_client = AzureOpenAIClient(
+            endpoint=config['azure_openai']['endpoint'],
+            api_key=config['azure_openai']['api_key'],
+            deployment_name=config['azure_openai']['deployment_name'],
+            api_version=config['azure_openai']['api_version'],
+            max_retries=config['azure_openai']['max_retries'],
+            temperature=config['azure_openai']['temperature'],
+            max_completion_tokens=config['azure_openai']['max_completion_tokens']
+        )
+        
+        timeline_gen = TimelineGenerator(
+            azure_client=azure_client,
+            genre=args.genre
+        )
+        
+        timeline = timeline_gen.generate_timeline(
+            top_shots,
+            target_duration=config['processing']['target_trailer_length']
+        )
+        
+        # Export timeline
+        timeline_gen.export_timeline(timeline, str(timeline_path))
+        logger.info(f"Generated timeline with {len(timeline['timeline'])} shots")
+        
+        checkpoint.mark_stage_completed('narrative_generation', {
+            'timeline_shots': len(timeline.get('timeline', [])),
+            'duration': timeline.get('total_duration', 0)
+        })
     
     # ========== STEP 8: VIDEO ASSEMBLY ==========
     logger.info("=" * 60)
@@ -358,20 +475,31 @@ def main():
     logger.info("=" * 60)
     logger.info(f"Timeline saved to: {timeline_path}")
     logger.info(f"Shot metadata: {shot_metadata_path}")
+    logger.info(f"Checkpoint: {checkpoint_file}")
     logger.info(f"Logs: {log_file}")
+    
+    # Display checkpoint stats
+    stats = checkpoint.get_stats()
+    logger.info(f"Pipeline progress: {stats['completed_stages']}/{stats['total_stages']} stages ({stats['progress_percent']:.1f}%)")
     
     print("\n" + "=" * 60)
     print("✓ TRAILER GENERATION PIPELINE COMPLETED")
     print("=" * 60)
     print(f"Output directory: {output_base}")
     print(f"Timeline: {timeline_path}")
+    print(f"Checkpoint: {checkpoint_file}")
     print(f"Shots analyzed: {len(shots)}")
     print(f"Top shots selected: {len(top_shots)}")
     print(f"Timeline duration: {timeline.get('total_duration', 0):.1f}s")
+    print(f"\n✓ Pipeline Progress: {stats['completed_stages']}/{stats['total_stages']} stages completed")
+    print("\nCompleted stages:")
+    for stage in stats['completed_list']:
+        print(f"  ✓ {stage}")
     print("\nNext steps:")
     print("1. Implement video assembly module")
     print("2. Implement audio mixing module")
     print("3. Run final rendering")
+    print(f"\nTo resume from a specific stage, use: --resume-from STAGE --skip-clean")
 
 if __name__ == '__main__':
     try:
