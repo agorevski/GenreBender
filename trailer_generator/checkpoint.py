@@ -23,7 +23,9 @@ class CheckpointManager:
         'remote_analysis',
         'genre_scoring',
         'shot_selection',
-        'narrative_generation'
+        'narrative_generation',
+        'video_assembly',
+        'audio_mixing'
     ]
     
     def __init__(self, checkpoint_path: Path):

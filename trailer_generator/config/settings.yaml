@@ -38,7 +38,6 @@ remote_analysis:
 # Azure OpenAI
 azure_openai:
   endpoint: "https://yourendpoint.openai.azure.com/"
-  # api_key: "${AZURE_OPENAI_KEY}"  # Use environment variable
   api_key: "your_key"  # API key for Azure OpenAI
   deployment_name: "gpt-5.1"
   api_version: "2025-01-01-preview"
@@ -46,20 +45,33 @@ azure_openai:
   temperature: 0.7
   max_completion_tokens: 4000  # Maximum tokens for completion
 
-# Video settings
+# Video assembly settings (Stage 8)
 video:
   resolution: "1920x1080"
   fps: 24
   codec: "libx264"
   bitrate: "5000k"
   preset: "medium"
+  transition_duration: 0.5  # seconds for crossfades
+  enable_color_grading: true
+  enable_transitions: true
+  # AI Features
+  ai_title_generation: false  # Use GPT-4 for title card generation
+  ai_transition_selection: false  # Use GPT-4 for transition type selection
 
-# Audio settings
+# Audio mixing settings (Stage 9)
 audio:
-  music_library_path: "audio_assets/"
+  music_library_path: "audio_assets/music/"
+  effects_library_path: "audio_assets/effects/"
   output_format: "aac"
   sample_rate: 48000
   bitrate: "192k"
+  ducking_threshold: -20  # dB threshold for ducking
+  ducking_ratio: 4  # Compression ratio for ducking
+  normalization_target: -14  # LUFS target for normalization
+  # AI Features
+  ai_music_selection: false  # Use GPT-4 for music track selection
+  fallback_to_original_audio: true  # Use original audio if no music found
 
 # Genre selection (default)
 genre: "thriller"

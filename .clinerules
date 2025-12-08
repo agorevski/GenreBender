@@ -1,7 +1,7 @@
 # GenreBender - AI-Powered Trailer Generator
 
 ## Project Overview
-GenreBender is a sophisticated system for automatically generating cinematic trailers from full-length movies with genre transformation (e.g., turn a drama into a thriller trailer). It uses a 7-stage modular pipeline combining computer vision, audio analysis, multimodal AI (Qwen2-VL), and GPT-4 for narrative generation.
+GenreBender is a sophisticated system for automatically generating cinematic trailers from full-length movies with genre transformation (e.g., turn a drama into a thriller trailer). It uses a complete 9-stage modular pipeline combining computer vision, audio analysis, multimodal AI (Qwen2-VL), GPT-4 for narrative generation, and FFmpeg for video assembly and audio mixing.
 
 ## Technology Stack
 - **Python**: 3.9+ (primary language)
@@ -15,6 +15,16 @@ GenreBender is a sophisticated system for automatically generating cinematic tra
 ```
 GenreBender/
 ├── main.py                          # Main pipeline orchestrator & CLI
+├── 1_shot_detection.py              # Stage 1 standalone script
+├── 2_keyframe_extraction.py         # Stage 2 standalone script
+├── 3_audio_extraction.py            # Stage 3 standalone script
+├── 4_remote_analysis.py             # Stage 4 standalone script
+├── 5_genre_scoring.py               # Stage 5 standalone script
+├── 6_shot_selection.py              # Stage 6 standalone script
+├── 7_narrative_generation.py        # Stage 7 standalone script
+├── 8_video_assembly.py              # Stage 8 standalone script
+├── 9_audio_mixing.py                # Stage 9 standalone script
+├── pipeline_common.py               # Shared utilities for standalone scripts
 ├── requirements.txt                 # Python dependencies
 ├── .env                            # API keys (not in repo)
 ├── qwen_server/                    # Qwen2-VL server implementation
@@ -36,17 +46,31 @@ GenreBender/
 │   │   ├── analysis_cache.py      # Analysis result caching
 │   │   ├── genre_scorer.py        # Genre-based shot scoring
 │   │   └── shot_selector.py       # Top shot selection
-│   └── narrative/
-│       ├── azure_client.py         # Azure OpenAI client
-│       ├── structure_prompts.py    # LLM prompt templates
-│       └── timeline_generator.py   # Timeline creation logic
+│   ├── narrative/
+│   │   ├── azure_client.py         # Azure OpenAI client
+│   │   ├── structure_prompts.py    # LLM prompt templates
+│   │   └── timeline_generator.py   # Timeline creation logic
+│   ├── assembly/                   # Stage 8 module
+│   │   ├── video_assembler.py     # Video concatenation & color grading
+│   │   ├── title_generator.py     # AI-powered title generation
+│   │   └── transition_selector.py # Transition selection logic
+│   └── audio/                      # Stage 9 module
+│       ├── audio_mixer.py         # Audio mixing engine
+│       └── music_selector.py      # Music library & selection
+├── audio_assets/                   # Audio resources
+│   ├── music/                     # Music library (user-populated)
+│   ├── effects/                   # Sound effects (future use)
+│   └── README.md                  # Audio setup guide
 ├── outputs/                        # Generated output structure
 │   └── <sanitized_filename>/
 │       ├── shots/                 # Extracted video shots
 │       ├── keyframes/             # Extracted frames (5 per shot)
 │       ├── cache/                 # Analysis cache
-│       ├── output/                # Final outputs (timeline.json)
-│       ├── temp/                  # Partial results
+│       ├── output/                # Final outputs
+│       │   ├── timeline.json      # Narrative timeline
+│       │   ├── trailer_assembled.mp4  # Stage 8 output
+│       │   └── trailer_final.mp4  # Stage 9 output (FINAL)
+│       ├── temp/                  # Partial results & temp files
 │       ├── checkpoint.json        # Pipeline state
 │       └── trailer_generator.log  # Detailed logs
 └── samples/                       # Sample videos for testing
@@ -66,7 +90,7 @@ GenreBender/
 - **.env**: API keys (AZURE_OPENAI_KEY)
 - Never commit API keys or credentials to repository
 
-### Pipeline Stages (7-Stage Architecture)
+### Pipeline Stages (9-Stage Architecture)
 1. **shot_detection**: Identify scene boundaries using PySceneDetect
 2. **keyframe_extraction**: Extract 5 frames per shot for temporal analysis
 3. **audio_extraction**: Extract MFCC, spectral centroid, RMS energy features
@@ -74,8 +98,8 @@ GenreBender/
 5. **genre_scoring**: Score shots based on genre profile weights
 6. **shot_selection**: Select top N shots (default: 60)
 7. **narrative_generation**: Generate coherent timeline with GPT-4
-
-**Note**: Stages 8 (video assembly) and 9 (audio mixing) are planned but not yet implemented.
+8. **video_assembly**: Assemble video with color grading and transitions
+9. **audio_mixing**: Mix music with audio ducking and normalization
 
 ## Common Workflows
 
@@ -117,8 +141,10 @@ python main.py --input movie.mp4 --genre thriller --reset-checkpoint
 ### Output Structure
 All outputs for a video are organized in `outputs/<sanitized_filename>/`:
 - **shots/shot_metadata.json**: Complete shot information with analysis
-- **output/timeline.json**: Final trailer timeline (primary deliverable)
+- **output/timeline.json**: Narrative timeline structure
 - **output/selected_shots.json**: Top-scored shots before timeline generation
+- **output/trailer_assembled.mp4**: Stage 8 output (video without final audio)
+- **output/trailer_final.mp4**: Stage 9 output (FINAL broadcast-ready trailer)
 - **checkpoint.json**: Pipeline state for resuming
 - **trailer_generator.log**: Detailed execution logs
 - **cache/analysis_cache.json**: Cached multimodal analysis results
@@ -233,8 +259,34 @@ jq . outputs/<filename>/output/timeline.json
 9. **Test resume functionality** after pipeline modifications
 10. **Keep output structure consistent** - external tools may depend on it
 
-## Future Implementation Notes
-- Video assembly (stage 8): Will use timeline.json to create final video
-- Audio mixing (stage 9): Will apply music and audio effects
-- Color grading: Specified in genre_profiles.yaml but not yet applied
-- Web UI: Planned dashboard for monitoring and control
+### Music Library Setup
+Place music files in `audio_assets/music/` with genre keywords:
+- `thriller_suspense_01.mp3`
+- `action_epic_music.wav`
+- `horror_atmospheric.mp3`
+
+See `audio_assets/README.md` for detailed setup.
+
+### AI Features (Optional)
+Configure in `settings.yaml`:
+```yaml
+video:
+  ai_title_generation: false      # GPT-4 title cards
+  ai_transition_selection: false  # GPT-4 transition selection
+
+audio:
+  ai_music_selection: false       # GPT-4 music recommendation
+```
+
+**Cost:** ~$0.05-0.08 per trailer when all AI features enabled
+
+### Documentation
+- `STAGES_8_9_IMPLEMENTATION.md`: Comprehensive implementation guide
+- `audio_assets/README.md`: Music library setup and usage
+
+## Future Enhancement Notes
+- Title card overlay rendering (drawtext filter)
+- Advanced sound effects layer
+- Beat detection for music sync
+- Web UI dashboard
+- Real-time preview mode

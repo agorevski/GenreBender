@@ -10,9 +10,10 @@ GenreBender transforms full-length movies into compelling trailers by:
 1. Analyzing visual, temporal, and audio content using multimodal AI
 2. Scoring shots based on target genre characteristics
 3. Generating narrative structure using GPT-4
-4. Creating shot timelines ready for video assembly
+4. Assembling video with transitions and color grading
+5. Mixing audio with music and effects
 
-The system processes movies through a 7-stage pipeline, with intelligent caching and checkpoint support for resumable processing.
+The system processes movies through a complete 9-stage pipeline, with intelligent caching and checkpoint support for resumable processing.
 
 ## 🏗️ Pipeline Stages
 
@@ -25,8 +26,8 @@ The system processes movies through a 7-stage pipeline, with intelligent caching
 | 5. Genre Scoring | Scores shots based on target genre profile | Custom algorithm |
 | 6. Shot Selection | Selects top candidates for trailer | Ranking system |
 | 7. Narrative Generation | Creates compelling trailer structure | Azure OpenAI GPT-4 |
-
-**Note**: Video assembly (stage 8) and audio mixing (stage 9) are planned for future implementation.
+| 8. Video Assembly | Assembles video with color grading & transitions | FFmpeg |
+| 9. Audio Mixing | Mixes music with audio ducking & normalization | FFmpeg |
 
 ## 📋 Prerequisites
 
@@ -108,6 +109,8 @@ Use with `--resume-from` or `--force-stage`:
 - `genre_scoring`
 - `shot_selection`
 - `narrative_generation`
+- `video_assembly`
+- `audio_mixing`
 
 ### Examples
 
@@ -141,7 +144,9 @@ outputs/<sanitized_filename>/
 │   └── analysis_cache.json
 ├── output/
 │   ├── timeline.json
-│   └── selected_shots.json
+│   ├── selected_shots.json
+│   ├── trailer_assembled.mp4    # Stage 8 output
+│   └── trailer_final.mp4         # Stage 9 output (FINAL)
 ├── temp/
 │   └── partial_analysis.json
 ├── checkpoint.json
@@ -254,19 +259,23 @@ pip install librosa soundfile
 ## 📝 Implementation Status
 
 ### ✅ Completed
-- 7-stage processing pipeline
+- Complete 9-stage processing pipeline
 - Multi-frame + audio multimodal analysis
 - Intelligent caching and checkpointing
 - Genre-configurable scoring
 - LLM-powered narrative generation
+- Video assembly with transitions & color grading
+- Audio mixing with music & ducking
 - Resumable processing with stage control
+- AI-powered title generation (optional)
+- AI-powered transition & music selection (optional)
 
 ### 🚧 Planned
-- Video assembly and rendering
-- Color grading application
-- Audio mixing and soundtrack
-- Text overlay rendering
+- Title card overlay rendering (drawtext filter)
+- Advanced sound effects layer
+- Beat detection for music sync
 - Web UI dashboard
+- Real-time preview mode
 
 ## 🤝 Contributing
 
@@ -284,6 +293,21 @@ Key extension points:
 - Azure OpenAI for narrative generation
 - Qwen2-VL for multimodal understanding
 
+## 🎵 Audio Assets
+
+Place music files in `audio_assets/music/` for automatic selection. Name files with genre keywords for better matching:
+- `thriller_suspense_01.mp3`
+- `action_epic_music.wav`
+- `horror_atmospheric.mp3`
+
+See `audio_assets/README.md` for detailed music library setup and recommendations.
+
+## 📚 Additional Documentation
+
+- `STAGES_8_9_IMPLEMENTATION.md` - Detailed implementation guide for stages 8 & 9
+- `audio_assets/README.md` - Music library setup and usage
+- `PIPELINE_STAGES.md` - Complete pipeline architecture documentation
+
 ---
 
-**Current Output**: The system generates detailed shot timelines in JSON format, ready for external video editing or future assembly module implementation.
+**Final Output**: The system generates complete, broadcast-ready trailers with professional color grading, transitions, and mixed audio at `outputs/<video>/output/trailer_final.mp4`.
