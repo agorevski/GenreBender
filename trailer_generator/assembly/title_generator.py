@@ -145,6 +145,7 @@ Return ONLY valid JSON in this exact format (no markdown, no explanations):
                 title['text'] = title['text'].upper()
             
             logger.info(f"Generated {len(titles)} AI titles")
+            logger.info(f"Titles: {titles}")
             return titles
             
         except json.JSONDecodeError as e:

@@ -85,7 +85,10 @@ def load_genre_profile(genre: str,
     with open(profile_path, 'r') as f:
         profiles = yaml.safe_load(f)
     
-    return profiles.get(genre.lower(), profiles.get('thriller'))
+    profile = profiles.get(genre.lower(), profiles.get('thriller'))
+    # Add genre name to profile for easy reference
+    profile['name'] = genre.lower()
+    return profile
 
 def setup_directories(output_base: Path) -> Dict[str, Path]:
     """

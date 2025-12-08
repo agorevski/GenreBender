@@ -143,8 +143,8 @@ Return ONLY the transition name, nothing else."""
             }
         ]
         
-        # Generate with low token limit
-        response = self.azure_client.generate_structured_output(
+        # Generate with low token limit (simple completion, not JSON)
+        response = self.azure_client.generate_completion(
             messages=messages,
             max_completion_tokens=50
         )

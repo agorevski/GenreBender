@@ -76,8 +76,8 @@ video:
   enable_color_grading: true
   enable_transitions: true
   # AI Features
-  ai_title_generation: false  # Use GPT-4 for title card generation
-  ai_transition_selection: false  # Use GPT-4 for transition type selection
+  ai_title_generation: true  # Use GPT-4 for title card generation
+  ai_transition_selection: true  # Use GPT-4 for transition type selection
 
 # Audio mixing settings (Stage 9)
 audio:
