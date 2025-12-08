@@ -1,0 +1,240 @@
+# GenreBender - AI-Powered Trailer Generator
+
+## Project Overview
+GenreBender is a sophisticated system for automatically generating cinematic trailers from full-length movies with genre transformation (e.g., turn a drama into a thriller trailer). It uses a 7-stage modular pipeline combining computer vision, audio analysis, multimodal AI (Qwen2-VL), and GPT-4 for narrative generation.
+
+## Technology Stack
+- **Python**: 3.9+ (primary language)
+- **Video Processing**: FFmpeg, PySceneDetect, OpenCV
+- **Audio Analysis**: librosa, soundfile
+- **AI/ML**: Qwen2-VL (multimodal analysis), Azure OpenAI GPT-4 (narrative)
+- **Configuration**: YAML files, python-dotenv
+- **Async Processing**: Batch processing with checkpoints
+
+## Project Structure
+```
+GenreBender/
+├── main.py                          # Main pipeline orchestrator & CLI
+├── requirements.txt                 # Python dependencies
+├── .env                            # API keys (not in repo)
+├── qwen_server/                    # Qwen2-VL server implementation
+│   ├── server.py                   # FastAPI server for multimodal analysis
+│   ├── analyzer.py                 # Core analysis logic
+│   └── model_loader.py            # Model loading utilities
+├── trailer_generator/              # Main package
+│   ├── checkpoint.py              # Checkpoint/resume system
+│   ├── config/
+│   │   ├── settings.yaml          # Global configuration
+│   │   └── genre_profiles.yaml    # Genre-specific scoring weights
+│   ├── ingest/
+│   │   ├── shot_detector.py       # Scene boundary detection
+│   │   ├── keyframe_extractor.py  # Multi-frame extraction
+│   │   ├── audio_extractor.py     # MFCC & spectral features
+│   │   └── batch_processor.py     # Batch processing utilities
+│   ├── analysis/
+│   │   ├── remote_analyzer.py     # Qwen2-VL API client
+│   │   ├── analysis_cache.py      # Analysis result caching
+│   │   ├── genre_scorer.py        # Genre-based shot scoring
+│   │   └── shot_selector.py       # Top shot selection
+│   └── narrative/
+│       ├── azure_client.py         # Azure OpenAI client
+│       ├── structure_prompts.py    # LLM prompt templates
+│       └── timeline_generator.py   # Timeline creation logic
+├── outputs/                        # Generated output structure
+│   └── <sanitized_filename>/
+│       ├── shots/                 # Extracted video shots
+│       ├── keyframes/             # Extracted frames (5 per shot)
+│       ├── cache/                 # Analysis cache
+│       ├── output/                # Final outputs (timeline.json)
+│       ├── temp/                  # Partial results
+│       ├── checkpoint.json        # Pipeline state
+│       └── trailer_generator.log  # Detailed logs
+└── samples/                       # Sample videos for testing
+```
+
+## Development Guidelines
+
+### Code Style
+- Follow PEP 8 conventions
+- Use type hints where appropriate
+- Document complex functions with docstrings
+- Keep functions focused and modular
+
+### Configuration Management
+- **settings.yaml**: Global processing parameters, API endpoints, batch sizes
+- **genre_profiles.yaml**: Genre-specific scoring weights, color grading, pacing
+- **.env**: API keys (AZURE_OPENAI_KEY)
+- Never commit API keys or credentials to repository
+
+### Pipeline Stages (7-Stage Architecture)
+1. **shot_detection**: Identify scene boundaries using PySceneDetect
+2. **keyframe_extraction**: Extract 5 frames per shot for temporal analysis
+3. **audio_extraction**: Extract MFCC, spectral centroid, RMS energy features
+4. **remote_analysis**: Multimodal analysis via Qwen2-VL server
+5. **genre_scoring**: Score shots based on genre profile weights
+6. **shot_selection**: Select top N shots (default: 60)
+7. **narrative_generation**: Generate coherent timeline with GPT-4
+
+**Note**: Stages 8 (video assembly) and 9 (audio mixing) are planned but not yet implemented.
+
+## Common Workflows
+
+### Running the Pipeline
+```bash
+# Basic usage
+python main.py --input movie.mp4 --genre thriller
+
+# Test mode (first 5 shots only)
+python main.py --input clip.mp4 --genre action --test
+
+# Resume from failed stage
+python main.py --input movie.mp4 --genre horror --resume-from remote_analysis --skip-clean
+
+# Force re-run specific stage (e.g., after config changes)
+python main.py --input movie.mp4 --genre comedy --force-stage genre_scoring --skip-clean
+
+# Reset and start fresh
+python main.py --input movie.mp4 --genre thriller --reset-checkpoint
+```
+
+### Available Genres
+- `thriller`: Suspenseful, building tension
+- `action`: Fast-paced, high energy  
+- `drama`: Emotional, character-driven
+- `horror`: Atmospheric, frightening
+- `scifi`: Futuristic, wonder-filled
+- `comedy`: Upbeat, humorous
+- `romance`: Warm, emotional connection
+
+### Checkpoint System
+- Automatically saves progress after each stage completion
+- Validates input file and genre match before resuming
+- Use `--resume-from STAGE` to skip completed stages
+- Use `--force-stage STAGE` to re-run a specific stage
+- Use `--reset-checkpoint` to start completely fresh
+- Always use `--skip-clean` when resuming to preserve existing work
+
+### Output Structure
+All outputs for a video are organized in `outputs/<sanitized_filename>/`:
+- **shots/shot_metadata.json**: Complete shot information with analysis
+- **output/timeline.json**: Final trailer timeline (primary deliverable)
+- **output/selected_shots.json**: Top-scored shots before timeline generation
+- **checkpoint.json**: Pipeline state for resuming
+- **trailer_generator.log**: Detailed execution logs
+- **cache/analysis_cache.json**: Cached multimodal analysis results
+
+## External Dependencies
+
+### Qwen2-VL Server
+- Must be running at URL specified in `settings.yaml` (`remote_analysis.qwen_server_url`)
+- Health check endpoint: `GET /health`
+- Batch analysis endpoint: `POST /analyze_batch`
+- Expected request format:
+  ```json
+  {
+    "shots": [{
+      "shot_id": 1,
+      "images": ["base64_img1", "base64_img2", ...],  // 5 frames
+      "audio_features": {...},
+      "start_time": 10.5,
+      "end_time": 12.8,
+      "duration": 2.3
+    }]
+  }
+  ```
+- Expected response: Caption + attributes (suspense, darkness, intensity, etc.)
+
+### Azure OpenAI
+- Requires valid endpoint and API key in `settings.yaml`
+- Uses GPT-4 deployment for narrative generation
+- API key can be in `.env` file as `AZURE_OPENAI_KEY`
+- Temperature: 0.7 (configurable)
+- Max tokens: 4000 (configurable)
+
+### FFmpeg
+- Must be installed and available in system PATH
+- Used for video/audio extraction and processing
+- Required for shot detection and keyframe extraction
+
+## Important Constraints
+
+### When Modifying Code:
+1. **Preserve checkpoint compatibility**: Changes to stage names or data structures may break resume functionality
+2. **Maintain shot metadata schema**: Other stages depend on consistent structure
+3. **Respect batch processing**: Large videos require batching to avoid memory issues
+4. **Cache invalidation**: Analysis cache keys include input path + shot times
+5. **Error handling**: Pipeline should save partial results before failing
+
+### Performance Considerations:
+- Default batch size: 10 shots (configurable in `settings.yaml`)
+- Keyframes: 5 frames per shot (temporal analysis requires multiple frames)
+- Analysis caching significantly speeds up re-runs
+- Test mode (`--test`) limits to first 5 shots for quick validation
+
+### File Naming:
+- Input filenames are sanitized for directory names (remove spaces, special chars)
+- Output structure is consistent: `outputs/<sanitized_name>/`
+- Shot files: `shot_0001.mp4`, `shot_0002.mp4`, etc.
+- Keyframe files: `kf_0001_1.jpg` through `kf_0001_5.jpg` (5 frames per shot)
+
+## Testing
+
+### Test Mode
+- Use `--test` flag to process only first 5 shots
+- Useful for validating pipeline changes quickly
+- Sample videos available in `samples/` directory
+
+### Manual Testing Workflow
+1. Test with `--test` flag first
+2. Check logs in `outputs/<filename>/trailer_generator.log`
+3. Verify checkpoint saves correctly
+4. Test resume functionality with `--resume-from`
+5. Validate final timeline.json structure
+
+## Debugging
+
+### Common Issues:
+1. **"Qwen2-VL server not responding"**: Check server URL and health endpoint
+2. **"FFmpeg not found"**: Ensure FFmpeg is in system PATH
+3. **"Resume validation failed"**: Input file or genre mismatch, use `--reset-checkpoint`
+4. **Out of memory**: Reduce `batch_size` in settings.yaml
+5. **librosa import error**: Install system dependencies (libsndfile1)
+
+### Log Locations:
+- Main log: `outputs/<filename>/trailer_generator.log`
+- Checkpoint state: `outputs/<filename>/checkpoint.json`
+- Partial results: `outputs/<filename>/temp/partial_analysis.json`
+
+### Useful Debug Commands:
+```bash
+# Check pipeline state
+cat outputs/<filename>/checkpoint.json | jq
+
+# View last 50 log lines
+tail -n 50 outputs/<filename>/trailer_generator.log
+
+# Check shot count
+jq 'length' outputs/<filename>/shots/shot_metadata.json
+
+# View timeline
+jq . outputs/<filename>/output/timeline.json
+```
+
+## Best Practices for AI Assistants
+
+1. **Always check checkpoint state** before suggesting changes that affect pipeline stages
+2. **Preserve backward compatibility** when modifying data structures
+3. **Use `--test` mode** when testing code changes
+4. **Respect the modular architecture** - each module has clear responsibilities
+5. **Consider cache implications** when modifying analysis logic
+6. **Update genre_profiles.yaml** when adding new scoring attributes
+7. **Maintain consistent error handling** - save partial results, log errors
+8. **Document API changes** if modifying server interfaces
+9. **Test resume functionality** after pipeline modifications
+10. **Keep output structure consistent** - external tools may depend on it
+
+## Future Implementation Notes
+- Video assembly (stage 8): Will use timeline.json to create final video
+- Audio mixing (stage 9): Will apply music and audio effects
+- Color grading: Specified in genre_profiles.yaml but not yet applied
+- Web UI: Planned dashboard for monitoring and control
