@@ -108,6 +108,11 @@ class CheckpointManager:
         """
         if stage not in self.STAGES:
             return False
+        
+        # Initialize stage if it doesn't exist in checkpoint data
+        if stage not in self.data['stages']:
+            self.data['stages'][stage] = {'completed': False}
+        
         return self.data['stages'][stage].get('completed', False)
     
     def get_last_completed_stage(self) -> Optional[str]:

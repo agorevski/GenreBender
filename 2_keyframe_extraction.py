@@ -51,10 +51,16 @@ def main():
     
     logger.info(f"Loaded {len(shots)} shots from metadata")
     
-    # Initialize extractor
+    # Initialize extractor with optimization settings
+    keyframe_config = config['keyframe']
     extractor = KeyframeExtractor(
         output_dir=str(dirs['keyframes']),
-        quality=config['keyframe']['quality']
+        quality=keyframe_config['quality'],
+        use_sequential=keyframe_config.get('use_sequential_read', True),
+        use_parallel=keyframe_config.get('parallel_extraction', False),
+        use_gpu=keyframe_config.get('use_gpu_decode', False),
+        parallel_workers=keyframe_config.get('parallel_workers', 0),
+        gpu_device_id=keyframe_config.get('gpu_device_id', 0)
     )
     
     # Extract keyframes (5 frames per shot for temporal analysis)
