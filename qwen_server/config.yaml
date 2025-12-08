@@ -31,6 +31,11 @@ processing:
   temporal_weight: 0.3                # Weight for temporal progression (0-1)
   audio_weight: 0.2                   # Weight for audio features (0-1)
   
+  # Prompt configuration
+  prompts_file: "prompts.yaml"              # Path to prompts file (relative to qwen_server/)
+  prompt_template: "default_analysis_prompt" # Which prompt to use from prompts.yaml
+  allow_client_prompt_override: true        # Allow client to send custom prompt in API request
+  
   # Batch parallelism (Phase 2)
   use_parallel_batching: true         # Process all shots in batch simultaneously (80%+ GPU util)
   dynamic_batch_sizing: false         # Adjust batch size based on available VRAM (future)

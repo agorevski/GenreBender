@@ -5,6 +5,8 @@ Processes multiple frames and audio features for comprehensive scene understandi
 
 import base64
 import io
+import os
+import yaml
 import torch
 import numpy as np
 from PIL import Image
@@ -41,8 +43,103 @@ class MultimodalAnalyzer:
         self.video_max_frames = config['processing'].get('video_max_frames', 16)
         self.video_fps_sampling = config['processing'].get('video_fps_sampling', 1.0)
         self.use_parallel_batching = config['processing'].get('use_parallel_batching', False)
+        
+        # Load prompts from YAML file
+        self.allow_client_prompt_override = config['processing'].get('allow_client_prompt_override', True)
+        self.attributes = {}  # Will store attribute definitions
+        self.prompt = self._load_prompt()
+        logger.info(f"Loaded prompt template: {config['processing'].get('prompt_template', 'default_analysis_prompt')}")
+        logger.info(f"Loaded {len(self.attributes)} attributes from prompts file")
     
-    def analyze_shot(self, shot_data: Dict) -> Dict:
+    def _load_prompt(self) -> str:
+        """
+        Load prompt template from YAML file and render with attribute definitions.
+        
+        Returns:
+            Rendered prompt string
+        """
+        # Get prompts file path (relative to qwen_server directory)
+        prompts_file = self.config['processing'].get('prompts_file', 'prompts.yaml')
+        prompt_template = self.config['processing'].get('prompt_template', 'default_analysis_prompt')
+        
+        # Construct full path
+        server_dir = os.path.dirname(os.path.abspath(__file__))
+        prompts_path = os.path.join(server_dir, prompts_file)
+        
+        # Load prompts YAML
+        with open(prompts_path, 'r') as f:
+            prompts_data = yaml.safe_load(f)
+        
+        # Extract attributes definitions
+        self.attributes = prompts_data.get('attributes', {})
+        if not self.attributes:
+            logger.warning("No attributes found in prompts file")
+        
+        # Get the specified template
+        if prompt_template not in prompts_data:
+            logger.warning(f"Prompt template '{prompt_template}' not found, using default")
+            prompt_template = 'default_analysis_prompt'
+        
+        prompt_str = prompts_data.get(prompt_template)
+        if not prompt_str:
+            raise ValueError(f"Prompt template '{prompt_template}' is empty or missing")
+        
+        # Render template with attribute variables
+        rendered_prompt = self._render_prompt_template(prompt_str, self.attributes)
+        
+        return rendered_prompt
+    
+    def _render_prompt_template(self, template: str, attributes: Dict[str, str]) -> str:
+        """
+        Render prompt template by replacing {{attributes}} and {{attributes_list}} variables.
+        
+        Args:
+            template: Prompt template string with variables
+            attributes: Dictionary of attribute name -> description
+            
+        Returns:
+            Rendered prompt string
+        """
+        # Generate {{attributes}} - bulleted list with descriptions
+        attributes_lines = []
+        for attr_name, description in attributes.items():
+            # Convert snake_case to Title_case for display
+            display_name = attr_name.replace('_', ' ').title().replace(' ', '_')
+            attributes_lines.append(f"   - {display_name}: {description}")
+        attributes_str = '\n'.join(attributes_lines)
+        
+        # Generate {{attributes_list}} - response format list
+        attributes_list_lines = []
+        for attr_name in attributes.keys():
+            display_name = attr_name.replace('_', ' ').title().replace(' ', '_')
+            attributes_list_lines.append(f"  {display_name}: [0.0-1.0]")
+        attributes_list_str = '\n'.join(attributes_list_lines)
+        
+        # Replace template variables
+        rendered = template.replace('{{attributes}}', attributes_str)
+        rendered = rendered.replace('{{attributes_list}}', attributes_list_str)
+        
+        return rendered
+    
+    def _get_prompt(self, custom_prompt: Optional[str] = None) -> str:
+        """
+        Get the prompt to use for analysis.
+        
+        Args:
+            custom_prompt: Optional custom prompt from API request
+            
+        Returns:
+            Prompt string to use
+        """
+        # Use custom prompt if provided and allowed
+        if custom_prompt and self.allow_client_prompt_override:
+            logger.debug("Using custom prompt from API request")
+            return custom_prompt
+        
+        # Otherwise use configured prompt
+        return self.prompt
+    
+    def analyze_shot(self, shot_data: Dict, custom_prompt: Optional[str] = None) -> Dict:
         """
         Analyze a single shot with multiple frames and audio features.
         
@@ -133,57 +230,8 @@ class MultimodalAnalyzer:
                 video_path = tmp_video.name
             
             try:
-                # Create prompt for genre attribute extraction
-                prompt = """Analyze this film scene and provide:
-1. A brief description of what's happening across the entire clip
-2. Rate the following attributes from 0.0 to 1.0:
-   - Suspense: Level of tension or anticipation
-   - Darkness: Visual darkness and mood
-   - Ambiguity: Unclear or mysterious elements
-   - Emotional_tension: Character stress or conflict
-   - Intensity: Overall energy and impact
-   - Motion: Amount of movement or action
-   - Impact: Visual or narrative impact
-   - Energy: Overall vitality and dynamism
-   - Emotional_connection: Relatability and emotional resonance
-   - Intimacy: Closeness and personal connection
-   - Warmth: Comfort and positive emotional tone
-   - Fear: Frightening or disturbing elements
-   - Unease: Discomfort or unsettling atmosphere
-   - Shock: Surprising or jarring moments
-   - Futuristic: Science fiction or advanced technology themes
-   - Technology: Presence of technological elements
-   - Wonder: Sense of awe or amazement
-   - Scale: Epic scope or grandeur
-   - Humor: Comedic or amusing elements
-   - Lightheartedness: Playful and carefree mood
-   - Timing: Comedic or dramatic timing quality
-   - Beauty: Aesthetic beauty or visual appeal
-
-Respond in this format:
-Description: [your description]
-Suspense: [0.0-1.0]
-Darkness: [0.0-1.0]
-Ambiguity: [0.0-1.0]
-Emotional_tension: [0.0-1.0]
-Intensity: [0.0-1.0]
-Motion: [0.0-1.0]
-Impact: [0.0-1.0]
-Energy: [0.0-1.0]
-Emotional_connection: [0.0-1.0]
-Intimacy: [0.0-1.0]
-Warmth: [0.0-1.0]
-Fear: [0.0-1.0]
-Unease: [0.0-1.0]
-Shock: [0.0-1.0]
-Futuristic: [0.0-1.0]
-Technology: [0.0-1.0]
-Wonder: [0.0-1.0]
-Scale: [0.0-1.0]
-Humor: [0.0-1.0]
-Lightheartedness: [0.0-1.0]
-Timing: [0.0-1.0]
-Beauty: [0.0-1.0]"""
+                # Use dynamically loaded prompt
+                prompt = self.prompt
                 
                 # Calculate optimal FPS to stay within frame limit
                 duration = shot_data.get('duration', 10.0)
@@ -331,57 +379,8 @@ Beauty: [0.0-1.0]"""
         Returns:
             Dictionary with caption and attributes
         """
-        # Create prompt for genre attribute extraction
-        prompt = """Analyze this film scene and provide:
-1. A brief description of what's happening
-2. Rate the following attributes from 0.0 to 1.0:
-   - Suspense: Level of tension or anticipation
-   - Darkness: Visual darkness and mood
-   - Ambiguity: Unclear or mysterious elements
-   - Emotional_tension: Character stress or conflict
-   - Intensity: Overall energy and impact
-   - Motion: Amount of movement or action
-   - Impact: Visual or narrative impact
-   - Energy: Overall vitality and dynamism
-   - Emotional_connection: Relatability and emotional resonance
-   - Intimacy: Closeness and personal connection
-   - Warmth: Comfort and positive emotional tone
-   - Fear: Frightening or disturbing elements
-   - Unease: Discomfort or unsettling atmosphere
-   - Shock: Surprising or jarring moments
-   - Futuristic: Science fiction or advanced technology themes
-   - Technology: Presence of technological elements
-   - Wonder: Sense of awe or amazement
-   - Scale: Epic scope or grandeur
-   - Humor: Comedic or amusing elements
-   - Lightheartedness: Playful and carefree mood
-   - Timing: Comedic or dramatic timing quality
-   - Beauty: Aesthetic beauty or visual appeal
-
-Respond in this format:
-Description: [your description]
-Suspense: [0.0-1.0]
-Darkness: [0.0-1.0]
-Ambiguity: [0.0-1.0]
-Emotional_tension: [0.0-1.0]
-Intensity: [0.0-1.0]
-Motion: [0.0-1.0]
-Impact: [0.0-1.0]
-Energy: [0.0-1.0]
-Emotional_connection: [0.0-1.0]
-Intimacy: [0.0-1.0]
-Warmth: [0.0-1.0]
-Fear: [0.0-1.0]
-Unease: [0.0-1.0]
-Shock: [0.0-1.0]
-Futuristic: [0.0-1.0]
-Technology: [0.0-1.0]
-Wonder: [0.0-1.0]
-Scale: [0.0-1.0]
-Humor: [0.0-1.0]
-Lightheartedness: [0.0-1.0]
-Timing: [0.0-1.0]
-Beauty: [0.0-1.0]"""
+        # Use dynamically loaded prompt
+        prompt = self.prompt
         
         try:
             # Prepare input
@@ -495,16 +494,10 @@ Beauty: [0.0-1.0]"""
                     pass
         
         # Ensure all attributes exist with default values
-        required_attrs = [
-            'suspense', 'darkness', 'ambiguity', 'emotional_tension', 
-            'intensity', 'motion', 'impact', 'energy', 'emotional_connection',
-            'intimacy', 'warmth', 'fear', 'unease', 'shock', 'futuristic',
-            'technology', 'wonder', 'scale', 'humor', 'lightheartedness',
-            'timing', 'beauty'
-        ]
-        for attr in required_attrs:
-            if attr not in attributes:
-                attributes[attr] = 0.5
+        # Use dynamically loaded attributes from prompts.yaml
+        for attr_name in self.attributes.keys():
+            if attr_name not in attributes:
+                attributes[attr_name] = 0.5
         
         return {
             'caption': caption or "Scene analysis",
@@ -518,32 +511,12 @@ Beauty: [0.0-1.0]"""
         Returns:
             Dictionary with default values
         """
+        # Use dynamically loaded attributes
+        default_attrs = {attr_name: 0.5 for attr_name in self.attributes.keys()}
+        
         return {
             'caption': "Scene",
-            'attributes': {
-                'suspense': 0.5,
-                'darkness': 0.5,
-                'ambiguity': 0.5,
-                'emotional_tension': 0.5,
-                'intensity': 0.5,
-                'motion': 0.5,
-                'impact': 0.5,
-                'energy': 0.5,
-                'emotional_connection': 0.5,
-                'intimacy': 0.5,
-                'warmth': 0.5,
-                'fear': 0.5,
-                'unease': 0.5,
-                'shock': 0.5,
-                'futuristic': 0.5,
-                'technology': 0.5,
-                'wonder': 0.5,
-                'scale': 0.5,
-                'humor': 0.5,
-                'lightheartedness': 0.5,
-                'timing': 0.5,
-                'beauty': 0.5
-            }
+            'attributes': default_attrs
         }
     
     def _aggregate_temporal(self, frame_analyses: List[Dict]) -> Dict:
@@ -721,57 +694,8 @@ Beauty: [0.0-1.0]"""
                 shot_key_images.append(key_images)
                 image_idx += count
             
-            # Create batch prompt (same for all shots)
-            prompt = """Analyze this film scene and provide:
-1. A brief description of what's happening
-2. Rate the following attributes from 0.0 to 1.0:
-   - Suspense: Level of tension or anticipation
-   - Darkness: Visual darkness and mood
-   - Ambiguity: Unclear or mysterious elements
-   - Emotional_tension: Character stress or conflict
-   - Intensity: Overall energy and impact
-   - Motion: Amount of movement or action
-   - Impact: Visual or narrative impact
-   - Energy: Overall vitality and dynamism
-   - Emotional_connection: Relatability and emotional resonance
-   - Intimacy: Closeness and personal connection
-   - Warmth: Comfort and positive emotional tone
-   - Fear: Frightening or disturbing elements
-   - Unease: Discomfort or unsettling atmosphere
-   - Shock: Surprising or jarring moments
-   - Futuristic: Science fiction or advanced technology themes
-   - Technology: Presence of technological elements
-   - Wonder: Sense of awe or amazement
-   - Scale: Epic scope or grandeur
-   - Humor: Comedic or amusing elements
-   - Lightheartedness: Playful and carefree mood
-   - Timing: Comedic or dramatic timing quality
-   - Beauty: Aesthetic beauty or visual appeal
-
-Respond in this format:
-Description: [your description]
-Suspense: [0.0-1.0]
-Darkness: [0.0-1.0]
-Ambiguity: [0.0-1.0]
-Emotional_tension: [0.0-1.0]
-Intensity: [0.0-1.0]
-Motion: [0.0-1.0]
-Impact: [0.0-1.0]
-Energy: [0.0-1.0]
-Emotional_connection: [0.0-1.0]
-Intimacy: [0.0-1.0]
-Warmth: [0.0-1.0]
-Fear: [0.0-1.0]
-Unease: [0.0-1.0]
-Shock: [0.0-1.0]
-Futuristic: [0.0-1.0]
-Technology: [0.0-1.0]
-Wonder: [0.0-1.0]
-Scale: [0.0-1.0]
-Humor: [0.0-1.0]
-Lightheartedness: [0.0-1.0]
-Timing: [0.0-1.0]
-Beauty: [0.0-1.0]"""
+            # Use dynamically loaded prompt (same for all shots)
+            prompt = self.prompt
             
             # Prepare batch messages - one message per shot
             batch_messages = []
@@ -895,32 +819,12 @@ Beauty: [0.0-1.0]"""
         Returns:
             Dictionary with default values
         """
+        # Use dynamically loaded attributes
+        empty_attrs = {attr_name: 0.0 for attr_name in self.attributes.keys()}
+        
         return {
             'caption': 'Analysis failed',
-            'attributes': {
-                'suspense': 0.0,
-                'darkness': 0.0,
-                'ambiguity': 0.0,
-                'emotional_tension': 0.0,
-                'intensity': 0.0,
-                'motion': 0.0,
-                'impact': 0.0,
-                'energy': 0.0,
-                'emotional_connection': 0.0,
-                'intimacy': 0.0,
-                'warmth': 0.0,
-                'fear': 0.0,
-                'unease': 0.0,
-                'shock': 0.0,
-                'futuristic': 0.0,
-                'technology': 0.0,
-                'wonder': 0.0,
-                'scale': 0.0,
-                'humor': 0.0,
-                'lightheartedness': 0.0,
-                'timing': 0.0,
-                'beauty': 0.0
-            }
+            'attributes': empty_attrs
         }
 
 

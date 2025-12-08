@@ -43,12 +43,17 @@ remote_analysis:
   # Request settings
   timeout: 60
   max_retries: 3
-  batch_size: 16
+  batch_size: 4
   cache_enabled: true
   cache_path: "cache/"
   
   # Multi-server settings (when server_count > 1)
   load_balancing: "round_robin"      # Options: round_robin, random (round_robin recommended for even distribution)
+  
+  # Custom prompt (OPTIONAL - leave null to use qwen_server default)
+  # If set, this prompt will override the server's configured prompt
+  # See qwen_server/prompts.yaml for prompt format and examples
+  custom_prompt: null                # null = use server default, or provide custom prompt string
 
 # Azure OpenAI
 azure_openai:

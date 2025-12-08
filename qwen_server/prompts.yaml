@@ -1,0 +1,56 @@
+# Qwen2-VL Analysis Prompts
+# These prompts define how the model analyzes film scenes
+# Edit these prompts to customize the analysis behavior
+
+# Attribute definitions - single source of truth
+# Format: attribute_name: "Description text"
+attributes:
+  suspense: "Level of tension or anticipation"
+  darkness: "Visual darkness and mood"
+  ambiguity: "Unclear or mysterious elements"
+  emotional_tension: "Character stress or conflict"
+  intensity: "Overall energy and impact"
+  motion: "Amount of movement or action"
+  impact: "Visual or narrative impact"
+  energy: "Overall vitality and dynamism"
+  emotional_connection: "Relatability and emotional resonance"
+  intimacy: "Closeness and personal connection"
+  warmth: "Comfort and positive emotional tone"
+  fear: "Frightening or disturbing elements"
+  unease: "Discomfort or unsettling atmosphere"
+  shock: "Surprising or jarring moments"
+  futuristic: "Science fiction or advanced technology themes"
+  technology: "Presence of technological elements"
+  wonder: "Sense of awe or amazement"
+  scale: "Epic scope or grandeur"
+  humor: "Comedic or amusing elements"
+  lightheartedness: "Playful and carefree mood"
+  timing: "Comedic or dramatic timing quality"
+  beauty: "Aesthetic beauty or visual appeal"
+
+# Template variables available:
+# {{attributes}} - Generates bulleted list with descriptions (e.g., "- Suspense: Level of tension...")
+# {{attributes_list}} - Generates response format list (e.g., "Suspense: [0.0-1.0]")
+
+default_analysis_prompt: |
+  Analyze this film scene and provide:
+  1. A brief description of what's happening
+  2. Rate the following attributes from 0.0 to 1.0:
+  {{attributes}}
+
+  Respond in this format:
+  Description: [your description]
+  {{attributes_list}}
+
+# Example: Custom prompt with subset of attributes
+# simple_prompt: |
+#   Describe this scene briefly and rate these attributes from 0.0 to 1.0:
+#   - Suspense: {{attributes.suspense}}
+#   - Intensity: {{attributes.intensity}}
+#   - Emotional_connection: {{attributes.emotional_connection}}
+#   
+#   Format:
+#   Description: [description]
+#   Suspense: [0.0-1.0]
+#   Intensity: [0.0-1.0]
+#   Emotional_connection: [0.0-1.0]
