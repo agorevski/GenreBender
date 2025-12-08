@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import List, Dict, Optional
 import logging
 import time
+import random
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +133,7 @@ class RemoteAnalyzer:
         Returns:
             List of shots with analysis results
         """
-        logger.info(f"Analyzing batch of {len(shots)} shots")
+        logger.info(f"Analyzing batch of {len(shots)} shots (batch_size config: {self.batch_size})")
         
         # Prepare batch payload with multiple frames per shot
         batch_items = []
@@ -390,7 +392,23 @@ class RemoteAnalyzer:
                 'ambiguity': 0.0,
                 'emotional_tension': 0.0,
                 'intensity': 0.0,
-                'motion': 0.0
+                'motion': 0.0,
+                'impact': 0.0,
+                'energy': 0.0,
+                'emotional_connection': 0.0,
+                'intimacy': 0.0,
+                'warmth': 0.0,
+                'fear': 0.0,
+                'unease': 0.0,
+                'shock': 0.0,
+                'futuristic': 0.0,
+                'technology': 0.0,
+                'wonder': 0.0,
+                'scale': 0.0,
+                'humor': 0.0,
+                'lightheartedness': 0.0,
+                'timing': 0.0,
+                'beauty': 0.0
             }
         }
     
@@ -411,3 +429,192 @@ class RemoteAnalyzer:
         except Exception as e:
             logger.error(f"Health check failed: {e}")
             return False
+
+
+class MultiServerAnalyzer:
+    """
+    Multi-server analyzer that distributes workload across multiple Qwen2-VL servers.
+    Enables true multi-GPU parallelism with one server per GPU.
+    """
+    
+    def __init__(self, server_urls: List[str], load_balancing: str = "round_robin",
+                 timeout: int = 30, max_retries: int = 3, batch_size: int = 10,
+                 api_key: Optional[str] = None):
+        """
+        Initialize multi-server analyzer.
+        
+        Args:
+            server_urls: List of server URLs (one per GPU)
+            load_balancing: Load balancing strategy ('round_robin' or 'random')
+            timeout: Request timeout in seconds
+            max_retries: Maximum number of retry attempts
+            batch_size: Number of shots per batch request
+            api_key: API key for server authentication
+        """
+        self.server_urls = server_urls
+        self.load_balancing = load_balancing
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self.batch_size = batch_size
+        self.api_key = api_key
+        
+        # Create analyzer for each server
+        self.analyzers = [
+            RemoteAnalyzer(url, timeout, max_retries, batch_size, api_key)
+            for url in server_urls
+        ]
+        
+        # Round-robin counter
+        self.current_idx = 0
+        
+        logger.info(f"Initialized MultiServerAnalyzer with {len(server_urls)} servers")
+        logger.info(f"Load balancing strategy: {load_balancing}")
+    
+    def _select_server(self) -> RemoteAnalyzer:
+        """
+        Select next server based on load balancing strategy.
+        
+        Returns:
+            RemoteAnalyzer instance
+        """
+        if self.load_balancing == "round_robin":
+            analyzer = self.analyzers[self.current_idx]
+            self.current_idx = (self.current_idx + 1) % len(self.analyzers)
+            return analyzer
+        elif self.load_balancing == "random":
+            return random.choice(self.analyzers)
+        else:
+            # Default to round-robin
+            return self._select_server()
+    
+    def _split_shots(self, shots: List[Dict]) -> List[List[Dict]]:
+        """
+        Split shots into N chunks (one per server).
+        
+        Args:
+            shots: List of shot dictionaries
+            
+        Returns:
+            List of shot chunks
+        """
+        num_servers = len(self.analyzers)
+        chunk_size = len(shots) // num_servers
+        remainder = len(shots) % num_servers
+        
+        chunks = []
+        start = 0
+        
+        for i in range(num_servers):
+            # Distribute remainder across first few chunks
+            size = chunk_size + (1 if i < remainder else 0)
+            chunks.append(shots[start:start + size])
+            start += size
+        
+        return chunks
+    
+    def analyze_batch(self, shots: List[Dict], video_path: str) -> List[Dict]:
+        """
+        Analyze shots by distributing across all servers in parallel.
+        
+        Args:
+            shots: List of shot dictionaries
+            video_path: Path to source video
+            
+        Returns:
+            List of shots with analysis results
+        """
+        num_shots = len(shots)
+        num_servers = len(self.analyzers)
+        
+        logger.info(f"Multi-server batch analysis: {num_shots} shots across {num_servers} servers")
+        
+        # Split shots into chunks
+        chunks = self._split_shots(shots)
+        
+        # Log distribution
+        for i, chunk in enumerate(chunks):
+            logger.info(f"  Server {i+1} ({self.server_urls[i]}): {len(chunk)} shots")
+        
+        # Analyze each chunk on different server in parallel
+        results = []
+        
+        with ThreadPoolExecutor(max_workers=num_servers) as executor:
+            # Submit all chunks
+            future_to_chunk = {}
+            for analyzer, chunk in zip(self.analyzers, chunks):
+                if chunk:  # Only submit if chunk has shots
+                    future = executor.submit(analyzer.analyze_batch, chunk, video_path)
+                    future_to_chunk[future] = chunk
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_chunk):
+                chunk = future_to_chunk[future]
+                try:
+                    analyzed_chunk = future.result()
+                    results.extend(analyzed_chunk)
+                    logger.info(f"Completed analyzing chunk of {len(chunk)} shots")
+                except Exception as e:
+                    logger.error(f"Error analyzing chunk: {e}")
+                    # Add failed shots with empty analysis
+                    for shot in chunk:
+                        shot['analysis'] = self._empty_analysis()
+                        results.append(shot)
+        
+        logger.info(f"Multi-server batch complete: {len(results)} shots analyzed")
+        
+        return results
+    
+    def health_check(self) -> bool:
+        """
+        Check if all servers are available.
+        
+        Returns:
+            True if all servers are responding
+        """
+        logger.info(f"Health checking {len(self.analyzers)} servers...")
+        
+        all_healthy = True
+        for i, analyzer in enumerate(self.analyzers):
+            url = self.server_urls[i]
+            if analyzer.health_check():
+                logger.info(f"  ✓ Server {i+1} ({url}): Healthy")
+            else:
+                logger.error(f"  ✗ Server {i+1} ({url}): Not responding")
+                all_healthy = False
+        
+        return all_healthy
+    
+    def _empty_analysis(self) -> Dict:
+        """
+        Return empty analysis structure for failed requests.
+        
+        Returns:
+            Dictionary with default values
+        """
+        return {
+            'caption': 'Analysis failed',
+            'attributes': {
+                'suspense': 0.0,
+                'darkness': 0.0,
+                'ambiguity': 0.0,
+                'emotional_tension': 0.0,
+                'intensity': 0.0,
+                'motion': 0.0,
+                'impact': 0.0,
+                'energy': 0.0,
+                'emotional_connection': 0.0,
+                'intimacy': 0.0,
+                'warmth': 0.0,
+                'fear': 0.0,
+                'unease': 0.0,
+                'shock': 0.0,
+                'futuristic': 0.0,
+                'technology': 0.0,
+                'wonder': 0.0,
+                'scale': 0.0,
+                'humor': 0.0,
+                'lightheartedness': 0.0,
+                'timing': 0.0,
+                'beauty': 0.0
+            }
+        }

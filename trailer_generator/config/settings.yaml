@@ -34,13 +34,21 @@ keyframe:
 
 # Remote analysis (Qwen2-VL server)
 remote_analysis:
-  qwen_server_url: "http://localhost:8000"
-  api_key: "helloagorevski"  # API key for qwen_server authentication
-  timeout: 30
+  # Server connection
+  server_host: "localhost"           # Server hostname or IP
+  server_base_port: 8000             # Starting port for multi-server (8000, 8001, 8002, 8003)
+  server_count: 4                    # Number of servers (1=single-server, 4=multi-server for 4 GPUs)
+  api_key: "helloagorevski"          # API key for qwen_server authentication
+  
+  # Request settings
+  timeout: 60
   max_retries: 3
-  batch_size: 10
+  batch_size: 16
   cache_enabled: true
   cache_path: "cache/"
+  
+  # Multi-server settings (when server_count > 1)
+  load_balancing: "round_robin"      # Options: round_robin, random (round_robin recommended for even distribution)
 
 # Azure OpenAI
 azure_openai:

@@ -8,6 +8,10 @@ model:
   cache_dir: "~/.cache/huggingface"
   max_length: 512                     # Max tokens for generation
   
+  # Multi-GPU configuration (Phase 3)
+  use_data_parallel: true             # Use DataParallel to saturate all GPUs simultaneously
+  data_parallel_devices: [0, 1, 2, 3] # GPU device IDs to use (null = use all available)
+  
 server:
   host: "0.0.0.0"
   port: 8000
@@ -15,17 +19,26 @@ server:
   workers: 1                          # Uvicorn workers (increase for production)
   reload: false                       # Auto-reload on code changes (dev only)
   
+  # Multi-server mode (true multi-GPU parallelism)
+  multi_server_mode: true             # Enable to run N servers (1 per GPU) for 4x performance
+  multi_server_base_port: 8000        # Starting port (8000, 8001, 8002, 8003)
+  multi_server_gpus: [0, 1, 2, 3]     # GPUs to use (one server per GPU)
+  
 processing:
-  max_batch_size: 10                  # Maximum shots per batch request
+  max_batch_size: 16                  # Maximum shots per batch request (increased for multi-GPU saturation)
   timeout_seconds: 60                 # Request timeout
   enable_audio_fusion: true           # Integrate audio features into analysis
   temporal_weight: 0.3                # Weight for temporal progression (0-1)
   audio_weight: 0.2                   # Weight for audio features (0-1)
   
-  # Video processing mode
-  use_native_video: true              # Use native video input instead of keyframes
-  video_max_frames: 8                 # Max frames for video mode (lower = faster, less tokens)
-  video_fps_sampling: 0.5             # FPS for video sampling (0.5 = 1 frame per 2 seconds)
+  # Batch parallelism (Phase 2)
+  use_parallel_batching: true         # Process all shots in batch simultaneously (80%+ GPU util)
+  dynamic_batch_sizing: false         # Adjust batch size based on available VRAM (future)
+  
+  # Video processing mode (IMPORTANT: Parallel batching only works with keyframes)
+  use_native_video: false             # Use native video input instead of keyframes (disable for parallel batching)
+  video_max_frames: 16                # Max frames for video mode (increased for better GPU utilization)
+  video_fps_sampling: 1.0             # FPS for video sampling (1 frame per second for better temporal analysis)
   
 attributes:
   # Genre attribute weights for scoring

@@ -31,6 +31,10 @@ class ModelLoader:
         self.cache_dir = os.path.expanduser(config['model']['cache_dir'])
         self.max_length = config['model'].get('max_length', 512)
         
+        # Multi-GPU configuration
+        self.use_data_parallel = config['model'].get('use_data_parallel', False)
+        self.data_parallel_devices = config['model'].get('data_parallel_devices', None)
+        
         self.model = None
         self.processor = None
         
@@ -73,22 +77,72 @@ class ModelLoader:
                 trust_remote_code=True
             )
             
-            # Load model
+            # Load model with appropriate parallelism strategy
             logger.info("Loading model (this may take a few minutes on first run)...")
-            self.model = Qwen2VLForConditionalGeneration.from_pretrained(
-                self.model_name,
-                cache_dir=self.cache_dir,
-                torch_dtype=self.torch_dtype,
-                device_map="auto" if self.device == "cuda" else None,
-                trust_remote_code=True
-            )
             
-            # Move to device if not using device_map
-            if self.device == "cpu":
-                self.model = self.model.to(self.device)
+            if self.use_data_parallel and self.device == "cuda" and torch.cuda.device_count() > 1:
+                # Data Parallel mode: Load on single GPU, then wrap with DataParallel
+                logger.info(f"Using DataParallel mode across {torch.cuda.device_count()} GPUs")
+                
+                # Load model on primary GPU (cuda:0) without device_map
+                self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+                    self.model_name,
+                    cache_dir=self.cache_dir,
+                    torch_dtype=self.torch_dtype,
+                    trust_remote_code=True
+                )
+                
+                # Move to primary GPU and ensure it's in eval mode before wrapping
+                self.model = self.model.to('cuda:0')
+                self.model.eval()
+                
+                # Wrap with DataParallel
+                if self.data_parallel_devices:
+                    device_ids = self.data_parallel_devices
+                    logger.info(f"Using specified GPU devices: {device_ids}")
+                else:
+                    device_ids = list(range(torch.cuda.device_count()))
+                    logger.info(f"Using all available GPU devices: {device_ids}")
+                
+                self.model = torch.nn.DataParallel(self.model, device_ids=device_ids)
+                logger.info(f"Model wrapped in DataParallel across GPUs: {device_ids}")
+                
+                # Force model replication to all GPUs by doing a dummy forward pass
+                logger.info("Warming up model on all GPUs...")
+                try:
+                    with torch.no_grad():
+                        # Create dummy input on primary device
+                        dummy_input = torch.zeros(len(device_ids), 10, device='cuda:0', dtype=self.torch_dtype)
+                        # This will trigger replication to all GPUs
+                        _ = self.model.module.model.embed_tokens(dummy_input.long())
+                    logger.info("Model successfully replicated across all GPUs")
+                except Exception as e:
+                    logger.warning(f"Could not warm up model: {e}. Model will replicate on first real batch.")
+                
+            else:
+                # Standard mode: Use device_map auto for model sharding or single GPU
+                if self.use_data_parallel:
+                    logger.warning("DataParallel requested but only 1 GPU available or not using CUDA")
+                
+                self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+                    self.model_name,
+                    cache_dir=self.cache_dir,
+                    torch_dtype=self.torch_dtype,
+                    device_map="auto" if self.device == "cuda" else None,
+                    trust_remote_code=True
+                )
+                
+                # Move to device if not using device_map
+                if self.device == "cpu":
+                    self.model = self.model.to(self.device)
             
             # Set to eval mode
             self.model.eval()
+            
+            # Enable GPU optimizations
+            if self.device == "cuda":
+                torch.backends.cudnn.benchmark = True
+                logger.info("Enabled cuDNN auto-tuner for optimized kernels")
             
             # Configure generation to avoid warnings
             if hasattr(self.model, 'generation_config'):

@@ -40,6 +40,7 @@ class MultimodalAnalyzer:
         self.use_native_video = config['processing'].get('use_native_video', False)
         self.video_max_frames = config['processing'].get('video_max_frames', 16)
         self.video_fps_sampling = config['processing'].get('video_fps_sampling', 1.0)
+        self.use_parallel_batching = config['processing'].get('use_parallel_batching', False)
     
     def analyze_shot(self, shot_data: Dict) -> Dict:
         """
@@ -228,14 +229,23 @@ Beauty: [0.0-1.0]"""
                 # Move to device
                 inputs = inputs.to(self.model.device)
                 
-                # Generate
+                # Generate with mixed precision for better GPU utilization
                 logger.info(f"Processing video clip (duration: {shot_data.get('duration', 0):.2f}s) with native video mode")
                 with torch.no_grad():
-                    outputs = self.model.generate(
-                        **inputs,
-                        max_new_tokens=256,
-                        do_sample=False
-                    )
+                    # Use automatic mixed precision if CUDA is available
+                    if torch.cuda.is_available():
+                        with torch.amp.autocast('cuda'):
+                            outputs = self.model.generate(
+                                **inputs,
+                                max_new_tokens=256,
+                                do_sample=False
+                            )
+                    else:
+                        outputs = self.model.generate(
+                            **inputs,
+                            max_new_tokens=256,
+                            do_sample=False
+                        )
                 
                 # Decode response
                 output_ids = outputs[:, inputs.input_ids.shape[1]:]
@@ -399,16 +409,32 @@ Beauty: [0.0-1.0]"""
                 return_tensors="pt"
             )
             
-            # Move to device
-            inputs = inputs.to(self.model.device)
+            # Move to device (handle DataParallel wrapper)
+            if isinstance(self.model, torch.nn.DataParallel):
+                device = self.model.module.device
+            else:
+                device = self.model.device
+            inputs = inputs.to(device)
             
-            # Generate
+            # Generate with mixed precision for better GPU utilization
+            # Handle DataParallel wrapper - need to access .module.generate()
+            model_to_use = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
+            
             with torch.no_grad():
-                outputs = self.model.generate(
-                    **inputs,
-                    max_new_tokens=256,
-                    do_sample=False
-                )
+                # Use automatic mixed precision if CUDA is available
+                if torch.cuda.is_available():
+                    with torch.amp.autocast('cuda'):
+                        outputs = model_to_use.generate(
+                            **inputs,
+                            max_new_tokens=256,
+                            do_sample=False
+                        )
+                else:
+                    outputs = model_to_use.generate(
+                        **inputs,
+                        max_new_tokens=256,
+                        do_sample=False
+                    )
             
             # Decode response
             output_ids = outputs[:, inputs.input_ids.shape[1]:]
@@ -640,6 +666,227 @@ Beauty: [0.0-1.0]"""
         )
         
         return fused
+    
+    def analyze_batch_parallel(self, shots_data: List[Dict]) -> List[Dict]:
+        """
+        Analyze multiple shots in parallel using true batched inference.
+        All shots are processed in a single model forward pass for maximum GPU utilization.
+        
+        Args:
+            shots_data: List of shot dictionaries, each containing images/video and metadata
+            
+        Returns:
+            List of analysis results, one per shot
+        """
+        if not self.use_parallel_batching:
+            # Fallback to sequential processing
+            logger.info("Parallel batching disabled, using sequential processing")
+            return [self.analyze_shot(shot) for shot in shots_data]
+        
+        logger.info(f"Processing {len(shots_data)} shots with parallel batching")
+        
+        try:
+            # Use keyframe mode for parallel batching (video mode is sequential)
+            if self.use_native_video:
+                logger.warning("Parallel batching not supported with native video mode, falling back to sequential")
+                return [self.analyze_shot(shot) for shot in shots_data]
+            
+            # Decode all images from all shots
+            all_images = []
+            shot_image_counts = []
+            
+            for shot in shots_data:
+                images = self._decode_images(shot.get('images', []))
+                if not images:
+                    logger.warning(f"No valid images for shot {shot.get('shot_id')}, using empty")
+                    images = []
+                all_images.extend(images)
+                shot_image_counts.append(len(images))
+            
+            if not all_images:
+                logger.error("No valid images in entire batch")
+                return [self._empty_analysis() for _ in shots_data]
+            
+            # Select key frames for each shot
+            shot_key_images = []
+            image_idx = 0
+            for count in shot_image_counts:
+                if count == 0:
+                    shot_key_images.append([])
+                    continue
+                    
+                shot_images = all_images[image_idx:image_idx + count]
+                key_indices = self._select_key_frames(count)
+                key_images = [shot_images[i] for i in key_indices]
+                shot_key_images.append(key_images)
+                image_idx += count
+            
+            # Create batch prompt (same for all shots)
+            prompt = """Analyze this film scene and provide:
+1. A brief description of what's happening
+2. Rate the following attributes from 0.0 to 1.0:
+   - Suspense: Level of tension or anticipation
+   - Darkness: Visual darkness and mood
+   - Ambiguity: Unclear or mysterious elements
+   - Emotional_tension: Character stress or conflict
+   - Intensity: Overall energy and impact
+   - Motion: Amount of movement or action
+   - Impact: Visual or narrative impact
+   - Energy: Overall vitality and dynamism
+   - Emotional_connection: Relatability and emotional resonance
+   - Intimacy: Closeness and personal connection
+   - Warmth: Comfort and positive emotional tone
+   - Fear: Frightening or disturbing elements
+   - Unease: Discomfort or unsettling atmosphere
+   - Shock: Surprising or jarring moments
+   - Futuristic: Science fiction or advanced technology themes
+   - Technology: Presence of technological elements
+   - Wonder: Sense of awe or amazement
+   - Scale: Epic scope or grandeur
+   - Humor: Comedic or amusing elements
+   - Lightheartedness: Playful and carefree mood
+   - Timing: Comedic or dramatic timing quality
+   - Beauty: Aesthetic beauty or visual appeal
+
+Respond in this format:
+Description: [your description]
+Suspense: [0.0-1.0]
+Darkness: [0.0-1.0]
+Ambiguity: [0.0-1.0]
+Emotional_tension: [0.0-1.0]
+Intensity: [0.0-1.0]
+Motion: [0.0-1.0]
+Impact: [0.0-1.0]
+Energy: [0.0-1.0]
+Emotional_connection: [0.0-1.0]
+Intimacy: [0.0-1.0]
+Warmth: [0.0-1.0]
+Fear: [0.0-1.0]
+Unease: [0.0-1.0]
+Shock: [0.0-1.0]
+Futuristic: [0.0-1.0]
+Technology: [0.0-1.0]
+Wonder: [0.0-1.0]
+Scale: [0.0-1.0]
+Humor: [0.0-1.0]
+Lightheartedness: [0.0-1.0]
+Timing: [0.0-1.0]
+Beauty: [0.0-1.0]"""
+            
+            # Prepare batch messages - one message per shot
+            batch_messages = []
+            for key_images in shot_key_images:
+                if not key_images:
+                    continue
+                    
+                # Create message with all key frames for this shot
+                content = [{"type": "image", "image": img} for img in key_images]
+                content.append({"type": "text", "text": prompt})
+                
+                batch_messages.append({
+                    "role": "user",
+                    "content": content
+                })
+            
+            if not batch_messages:
+                logger.error("No valid messages in batch")
+                return [self._empty_analysis() for _ in shots_data]
+            
+            # Process all shots with batch processor
+            logger.info(f"Processing {len(batch_messages)} shots in single forward pass")
+            
+            # Apply chat template to each message
+            batch_texts = []
+            for msg in batch_messages:
+                text = self.processor.apply_chat_template(
+                    [msg], tokenize=False, add_generation_prompt=True
+                )
+                batch_texts.append(text)
+            
+            # Extract all images for batch processing
+            batch_images = []
+            for msg in batch_messages:
+                for content_item in msg["content"]:
+                    if content_item.get("type") == "image":
+                        batch_images.append(content_item["image"])
+            
+            # Process with model in batch
+            inputs = self.processor(
+                text=batch_texts,
+                images=batch_images if batch_images else None,
+                videos=None,
+                padding=True,
+                return_tensors="pt"
+            )
+            
+            # Move to device (handle DataParallel wrapper)
+            if isinstance(self.model, torch.nn.DataParallel):
+                device = self.model.module.device
+            else:
+                device = self.model.device
+            inputs = inputs.to(device)
+            
+            # Generate with mixed precision
+            # Handle DataParallel wrapper - need to access .module.generate()
+            model_to_use = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
+            
+            logger.info(f"Running batched inference on {len(batch_texts)} shots")
+            with torch.no_grad():
+                if torch.cuda.is_available():
+                    with torch.amp.autocast('cuda'):
+                        outputs = model_to_use.generate(
+                            **inputs,
+                            max_new_tokens=256,
+                            do_sample=False
+                        )
+                else:
+                    outputs = model_to_use.generate(
+                        **inputs,
+                        max_new_tokens=256,
+                        do_sample=False
+                    )
+            
+            # Decode all responses
+            output_ids = outputs[:, inputs.input_ids.shape[1]:]
+            generated_texts = self.processor.batch_decode(
+                output_ids,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False
+            )
+            
+            logger.info(f"Batch inference complete, parsing {len(generated_texts)} results")
+            
+            # Parse each result
+            results = []
+            for i, shot in enumerate(shots_data):
+                if i < len(generated_texts):
+                    parsed = self._parse_model_output(generated_texts[i])
+                    
+                    # Add audio fusion if available
+                    if self.enable_audio_fusion and shot.get('audio_features'):
+                        audio_context = self._process_audio_features(shot['audio_features'])
+                        attributes = self._fuse_multimodal(parsed['attributes'], audio_context)
+                    else:
+                        attributes = parsed['attributes']
+                    
+                    results.append({
+                        'caption': parsed['caption'],
+                        'attributes': attributes,
+                        'processing_mode': 'keyframes_parallel'
+                    })
+                else:
+                    logger.warning(f"Missing result for shot {i}, using empty analysis")
+                    results.append(self._empty_analysis())
+            
+            logger.info(f"Parallel batch processing complete for {len(results)} shots")
+            return results
+            
+        except Exception as e:
+            import traceback
+            logger.error(f"Error in parallel batch processing: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.warning("Falling back to sequential processing")
+            return [self.analyze_shot(shot) for shot in shots_data]
     
     def _empty_analysis(self) -> Dict:
         """

@@ -12,7 +12,7 @@ from pipeline_common import (
     initialize_stage, print_completion_message, add_common_arguments,
     load_config, load_shots_from_metadata, save_shots_to_metadata
 )
-from trailer_generator.analysis import RemoteAnalyzer, AnalysisCache
+from trailer_generator.analysis import RemoteAnalyzer, MultiServerAnalyzer, AnalysisCache
 from trailer_generator.ingest import BatchProcessor
 
 def main():
@@ -68,25 +68,57 @@ def main():
     logger.info(f"Cache: {len(cached_shots)} cached, {len(uncached_shots)} to analyze")
     
     if uncached_shots:
-        # Initialize remote analyzer
-        analyzer = RemoteAnalyzer(
-            server_url=config['remote_analysis']['qwen_server_url'],
-            timeout=config['remote_analysis']['timeout'],
-            max_retries=config['remote_analysis']['max_retries'],
-            batch_size=config['remote_analysis']['batch_size'],
-            api_key=config['remote_analysis'].get('api_key')
-        )
+        # Build server URLs from configuration
+        server_host = config['remote_analysis'].get('server_host', 'localhost')
+        server_base_port = config['remote_analysis'].get('server_base_port', 8000)
+        server_count = config['remote_analysis'].get('server_count', 1)
+        
+        if server_count > 1:
+            # Multi-server mode (true multi-GPU parallelism)
+            server_urls = [
+                f"http://{server_host}:{server_base_port + i}"
+                for i in range(server_count)
+            ]
+            logger.info(f"Using multi-server mode with {server_count} servers")
+            logger.info(f"Server URLs: {server_urls}")
+            
+            analyzer = MultiServerAnalyzer(
+                server_urls=server_urls,
+                load_balancing=config['remote_analysis'].get('load_balancing', 'round_robin'),
+                timeout=config['remote_analysis']['timeout'],
+                max_retries=config['remote_analysis']['max_retries'],
+                batch_size=config['remote_analysis']['batch_size'],
+                api_key=config['remote_analysis'].get('api_key')
+            )
+        else:
+            # Single-server mode
+            server_url = f"http://{server_host}:{server_base_port}"
+            logger.info(f"Using single-server mode: {server_url}")
+            
+            analyzer = RemoteAnalyzer(
+                server_url=server_url,
+                timeout=config['remote_analysis']['timeout'],
+                max_retries=config['remote_analysis']['max_retries'],
+                batch_size=config['remote_analysis']['batch_size'],
+                api_key=config['remote_analysis'].get('api_key')
+            )
         
         # Check server health
         if not analyzer.health_check():
-            logger.warning("⚠️  Qwen2-VL server not responding. Check server status.")
-            print("\n⚠️  Warning: Qwen2-VL server not responding!")
-            print("Make sure the server is running at:", config['remote_analysis']['qwen_server_url'])
+            logger.warning("⚠️  Qwen2-VL server(s) not responding. Check server status.")
+            print("\n⚠️  Warning: Qwen2-VL server(s) not responding!")
+            if server_count > 1:
+                print(f"Make sure all {server_count} servers are running at:")
+                for url in server_urls:
+                    print(f"  - {url}")
+            else:
+                print(f"Make sure the server is running at: {server_url}")
             sys.exit(1)
         
         # Batch process uncached shots
+        # Use remote_analysis batch_size to match server limits
         batch_processor = BatchProcessor(
-            batch_size=config['processing']['max_batch_size']
+            batch_size=config['remote_analysis']['batch_size']
         )
         
         analyzed_shots = []

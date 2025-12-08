@@ -274,17 +274,44 @@ async def analyze_batch(
         
         logger.info(f"Batch validation passed for {len(request.shots)} shots")
         
-        # Analyze each shot
-        results = []
-        for shot_request in request.shots:
-            shot_data = shot_request.dict()
-            result = analyzer.analyze_shot(shot_data)
+        # Check if parallel batching is enabled
+        use_parallel = config['processing'].get('use_parallel_batching', False)
+        
+        if use_parallel:
+            # Use parallel batch processing (Phase 2)
+            logger.info(f"Using parallel batch processing for {len(request.shots)} shots")
+            shots_data = [shot_request.dict() for shot_request in request.shots]
+            batch_results = analyzer.analyze_batch_parallel(shots_data)
             
-            results.append({
-                'shot_id': shot_request.shot_id,
-                'caption': result['caption'],
-                'attributes': result['attributes']
-            })
+            # Format results
+            results = []
+            for i, shot_request in enumerate(request.shots):
+                if i < len(batch_results):
+                    results.append({
+                        'shot_id': shot_request.shot_id,
+                        'caption': batch_results[i]['caption'],
+                        'attributes': batch_results[i]['attributes']
+                    })
+                else:
+                    logger.warning(f"Missing result for shot {shot_request.shot_id}")
+                    results.append({
+                        'shot_id': shot_request.shot_id,
+                        'caption': 'Analysis failed',
+                        'attributes': {}
+                    })
+        else:
+            # Use sequential processing (legacy)
+            logger.info(f"Using sequential processing for {len(request.shots)} shots")
+            results = []
+            for shot_request in request.shots:
+                shot_data = shot_request.dict()
+                result = analyzer.analyze_shot(shot_data)
+                
+                results.append({
+                    'shot_id': shot_request.shot_id,
+                    'caption': result['caption'],
+                    'attributes': result['attributes']
+                })
         
         logger.info(f"Analyzed batch of {len(results)} shots")
         
@@ -315,8 +342,19 @@ async def root():
 
 # Run server
 if __name__ == "__main__":
-    host = config['server']['host']
-    port = config['server']['port']
+    import argparse
+    
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Qwen2-VL Server')
+    parser.add_argument('--port', type=int, default=None,
+                       help='Port to run server on (overrides config)')
+    parser.add_argument('--host', type=str, default=None,
+                       help='Host to bind to (overrides config)')
+    args = parser.parse_args()
+    
+    # Get configuration with command line overrides
+    host = args.host if args.host else config['server']['host']
+    port = args.port if args.port else config['server']['port']
     reload = config['server'].get('reload', False)
     workers = config['server'].get('workers', 1)
     
