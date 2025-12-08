@@ -18,6 +18,7 @@ shot_detection:
   threshold: 27.0  # PySceneDetect content threshold
   min_shot_duration: 0.5  # seconds
   max_shot_duration: 10.0  # seconds
+  frame_skip: 24 # Frame skip for faster detection (0=no skip, 1=every other frame, 2=every 3rd, etc.)
 
 # Keyframe extraction
 keyframe:

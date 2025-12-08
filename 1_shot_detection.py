@@ -44,16 +44,17 @@ def main():
         output_dir=str(dirs['shots'])
     )
     
+    # Get frame_skip from config
+    frame_skip = config['shot_detection'].get('frame_skip', 0)
+    
     # Detect shots
     logger.info("Starting shot detection...")
-    shots = detector.detect_shots(args.input, streaming=True)
+    shots = detector.detect_shots(args.input, streaming=True, frame_skip=frame_skip)
     logger.info(f"Detected {len(shots)} shots")
     
-    # Limit to first 5 shots in test mode
-    if args.test:
-        original_count = len(shots)
-        shots = shots[:5]
-        logger.info(f"TEST MODE: Limited from {original_count} to {len(shots)} shots")
+    # Verify extraction completed
+    extracted_count = sum(1 for s in shots if s.get('file'))
+    logger.info(f"Extracted {extracted_count} shot video files")
     
     # Save metadata
     shot_metadata_path = dirs['shots'] / 'shot_metadata.json'
