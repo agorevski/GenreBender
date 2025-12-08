@@ -139,9 +139,25 @@ class MultimodalAnalyzer:
    - Suspense: Level of tension or anticipation
    - Darkness: Visual darkness and mood
    - Ambiguity: Unclear or mysterious elements
-   - Emotional tension: Character stress or conflict
+   - Emotional_tension: Character stress or conflict
    - Intensity: Overall energy and impact
    - Motion: Amount of movement or action
+   - Impact: Visual or narrative impact
+   - Energy: Overall vitality and dynamism
+   - Emotional_connection: Relatability and emotional resonance
+   - Intimacy: Closeness and personal connection
+   - Warmth: Comfort and positive emotional tone
+   - Fear: Frightening or disturbing elements
+   - Unease: Discomfort or unsettling atmosphere
+   - Shock: Surprising or jarring moments
+   - Futuristic: Science fiction or advanced technology themes
+   - Technology: Presence of technological elements
+   - Wonder: Sense of awe or amazement
+   - Scale: Epic scope or grandeur
+   - Humor: Comedic or amusing elements
+   - Lightheartedness: Playful and carefree mood
+   - Timing: Comedic or dramatic timing quality
+   - Beauty: Aesthetic beauty or visual appeal
 
 Respond in this format:
 Description: [your description]
@@ -150,7 +166,23 @@ Darkness: [0.0-1.0]
 Ambiguity: [0.0-1.0]
 Emotional_tension: [0.0-1.0]
 Intensity: [0.0-1.0]
-Motion: [0.0-1.0]"""
+Motion: [0.0-1.0]
+Impact: [0.0-1.0]
+Energy: [0.0-1.0]
+Emotional_connection: [0.0-1.0]
+Intimacy: [0.0-1.0]
+Warmth: [0.0-1.0]
+Fear: [0.0-1.0]
+Unease: [0.0-1.0]
+Shock: [0.0-1.0]
+Futuristic: [0.0-1.0]
+Technology: [0.0-1.0]
+Wonder: [0.0-1.0]
+Scale: [0.0-1.0]
+Humor: [0.0-1.0]
+Lightheartedness: [0.0-1.0]
+Timing: [0.0-1.0]
+Beauty: [0.0-1.0]"""
                 
                 # Calculate optimal FPS to stay within frame limit
                 duration = shot_data.get('duration', 10.0)
@@ -296,9 +328,25 @@ Motion: [0.0-1.0]"""
    - Suspense: Level of tension or anticipation
    - Darkness: Visual darkness and mood
    - Ambiguity: Unclear or mysterious elements
-   - Emotional tension: Character stress or conflict
+   - Emotional_tension: Character stress or conflict
    - Intensity: Overall energy and impact
    - Motion: Amount of movement or action
+   - Impact: Visual or narrative impact
+   - Energy: Overall vitality and dynamism
+   - Emotional_connection: Relatability and emotional resonance
+   - Intimacy: Closeness and personal connection
+   - Warmth: Comfort and positive emotional tone
+   - Fear: Frightening or disturbing elements
+   - Unease: Discomfort or unsettling atmosphere
+   - Shock: Surprising or jarring moments
+   - Futuristic: Science fiction or advanced technology themes
+   - Technology: Presence of technological elements
+   - Wonder: Sense of awe or amazement
+   - Scale: Epic scope or grandeur
+   - Humor: Comedic or amusing elements
+   - Lightheartedness: Playful and carefree mood
+   - Timing: Comedic or dramatic timing quality
+   - Beauty: Aesthetic beauty or visual appeal
 
 Respond in this format:
 Description: [your description]
@@ -307,7 +355,23 @@ Darkness: [0.0-1.0]
 Ambiguity: [0.0-1.0]
 Emotional_tension: [0.0-1.0]
 Intensity: [0.0-1.0]
-Motion: [0.0-1.0]"""
+Motion: [0.0-1.0]
+Impact: [0.0-1.0]
+Energy: [0.0-1.0]
+Emotional_connection: [0.0-1.0]
+Intimacy: [0.0-1.0]
+Warmth: [0.0-1.0]
+Fear: [0.0-1.0]
+Unease: [0.0-1.0]
+Shock: [0.0-1.0]
+Futuristic: [0.0-1.0]
+Technology: [0.0-1.0]
+Wonder: [0.0-1.0]
+Scale: [0.0-1.0]
+Humor: [0.0-1.0]
+Lightheartedness: [0.0-1.0]
+Timing: [0.0-1.0]
+Beauty: [0.0-1.0]"""
         
         try:
             # Prepare input
@@ -404,9 +468,14 @@ Motion: [0.0-1.0]"""
                 except:
                     pass
         
-        # Ensure all attributes exist
-        required_attrs = ['suspense', 'darkness', 'ambiguity', 
-                         'emotional_tension', 'intensity', 'motion']
+        # Ensure all attributes exist with default values
+        required_attrs = [
+            'suspense', 'darkness', 'ambiguity', 'emotional_tension', 
+            'intensity', 'motion', 'impact', 'energy', 'emotional_connection',
+            'intimacy', 'warmth', 'fear', 'unease', 'shock', 'futuristic',
+            'technology', 'wonder', 'scale', 'humor', 'lightheartedness',
+            'timing', 'beauty'
+        ]
         for attr in required_attrs:
             if attr not in attributes:
                 attributes[attr] = 0.5
@@ -431,7 +500,23 @@ Motion: [0.0-1.0]"""
                 'ambiguity': 0.5,
                 'emotional_tension': 0.5,
                 'intensity': 0.5,
-                'motion': 0.5
+                'motion': 0.5,
+                'impact': 0.5,
+                'energy': 0.5,
+                'emotional_connection': 0.5,
+                'intimacy': 0.5,
+                'warmth': 0.5,
+                'fear': 0.5,
+                'unease': 0.5,
+                'shock': 0.5,
+                'futuristic': 0.5,
+                'technology': 0.5,
+                'wonder': 0.5,
+                'scale': 0.5,
+                'humor': 0.5,
+                'lightheartedness': 0.5,
+                'timing': 0.5,
+                'beauty': 0.5
             }
         }
     
@@ -571,7 +656,23 @@ Motion: [0.0-1.0]"""
                 'ambiguity': 0.0,
                 'emotional_tension': 0.0,
                 'intensity': 0.0,
-                'motion': 0.0
+                'motion': 0.0,
+                'impact': 0.0,
+                'energy': 0.0,
+                'emotional_connection': 0.0,
+                'intimacy': 0.0,
+                'warmth': 0.0,
+                'fear': 0.0,
+                'unease': 0.0,
+                'shock': 0.0,
+                'futuristic': 0.0,
+                'technology': 0.0,
+                'wonder': 0.0,
+                'scale': 0.0,
+                'humor': 0.0,
+                'lightheartedness': 0.0,
+                'timing': 0.0,
+                'beauty': 0.0
             }
         }
 
