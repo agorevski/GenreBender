@@ -3,3 +3,4 @@
 **/venv_qwen_server/
 **/outputs/
 **/*.log
+.env

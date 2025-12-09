@@ -71,6 +71,14 @@ class AzureOpenAIClient:
             temperature = self.temperature
         if max_completion_tokens is None:
             max_completion_tokens = self.max_completion_tokens
+        
+        # Log request details
+        prompt_chars = sum(len(m.get('content', '')) for m in messages)
+        estimated_prompt_tokens = self.estimate_tokens(str(prompt_chars))
+        logger.info(f"API Request: {len(messages)} messages, ~{prompt_chars} chars, "
+                   f"~{estimated_prompt_tokens} tokens, temp={temperature}, "
+                   f"max_tokens={max_completion_tokens}")
+        logger.debug(f"Request format: {response_format}")
             
         for attempt in range(self.max_retries):
             try:
@@ -86,10 +94,41 @@ class AzureOpenAIClient:
                 
                 response = self.client.chat.completions.create(**kwargs)
                 
-                completion = response.choices[0].message.content
+                # Enhanced response logging
+                choice = response.choices[0]
+                completion = choice.message.content or ""
+                finish_reason = choice.finish_reason
                 
-                logger.info(f"Generated completion ({len(completion)} chars)")
-                logger.debug(f"Tokens used: {response.usage.total_tokens}")
+                # Log usage stats
+                if hasattr(response, 'usage') and response.usage:
+                    logger.info(f"API Response: {len(completion)} chars, "
+                               f"finish_reason={finish_reason}, "
+                               f"tokens: prompt={response.usage.prompt_tokens}, "
+                               f"completion={response.usage.completion_tokens}, "
+                               f"total={response.usage.total_tokens}")
+                else:
+                    logger.info(f"API Response: {len(completion)} chars, "
+                               f"finish_reason={finish_reason}")
+                
+                # Check for content filtering
+                if hasattr(choice, 'content_filter_results') and choice.content_filter_results:
+                    logger.warning(f"Content filter results: {choice.content_filter_results}")
+                
+                # Handle truncated responses (finish_reason=length)
+                if finish_reason == 'length':
+                    logger.warning(f"Response truncated due to token limit! Received {len(completion)} chars")
+                    if completion:
+                        logger.warning(f"Response preview: {completion[:200]}...")
+                        logger.warning(f"Response end: ...{completion[-200:]}")
+                
+                # Log warning for empty responses
+                if not completion:
+                    logger.error(f"Empty completion received! finish_reason={finish_reason}")
+                    if hasattr(choice, 'content_filter_results'):
+                        logger.error(f"Content filter results: {choice.content_filter_results}")
+                    logger.debug(f"Full response object: {response}")
+                else:
+                    logger.info(f"Generated completion ({len(completion)} chars)")
                 
                 return completion
                 
@@ -139,7 +178,7 @@ class AzureOpenAIClient:
         return len(text) // 4
     
     def check_token_limit(self, messages: List[Dict[str, str]], 
-                         max_tokens: int = 8000) -> bool:
+                         max_tokens: int = 50000) -> bool:
         """
         Check if messages fit within token limit.
         
@@ -160,8 +199,7 @@ class AzureOpenAIClient:
         
         return within_limit
     
-    def truncate_messages(self, messages: List[Dict[str, str]], 
-                         max_tokens: int = 8000) -> List[Dict[str, str]]:
+    def truncate_messages(self, messages: List[Dict[str, str]], max_tokens: int = 8000) -> List[Dict[str, str]]:
         """
         Truncate messages to fit token limit.
         

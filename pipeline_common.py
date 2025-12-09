@@ -67,15 +67,26 @@ def setup_logging(log_file: Path, level: str = 'INFO'):
     )
 
 def load_config(config_path: str = 'trailer_generator/config/settings.yaml') -> Dict:
-    """Load configuration from YAML file."""
+    """Load configuration from YAML file with environment variable overrides."""
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     
-    # Replace environment variables
-    api_key = config.get('azure_openai', {}).get('api_key', '')
-    if api_key.startswith('${') and api_key.endswith('}'):
-        env_var = api_key[2:-1]
-        config['azure_openai']['api_key'] = os.getenv(env_var)
+    # Override Azure OpenAI settings from environment variables if present
+    if 'azure_openai' in config:
+        # Override endpoint if AZURE_OPENAI_ENDPOINT is set
+        env_endpoint = os.getenv('AZURE_OPENAI_ENDPOINT', None)
+        if env_endpoint:
+            config['azure_openai']['endpoint'] = env_endpoint
+        
+        # Override api_key if AZURE_OPENAI_KEY is set
+        env_api_key = os.getenv('AZURE_OPENAI_KEY', None)
+        if env_api_key:
+            config['azure_openai']['api_key'] = env_api_key
+        # Fallback: Replace ${VAR} style references (legacy support)
+        elif config['azure_openai'].get('api_key', '').startswith('${'):
+            api_key = config['azure_openai']['api_key']
+            env_var = api_key[2:-1]
+            config['azure_openai']['api_key'] = os.getenv(env_var)
     
     return config
 

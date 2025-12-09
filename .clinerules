@@ -108,8 +108,11 @@ GenreBender/
 - **genre_profiles.yaml**: Genre-specific scoring weights, color grading, pacing
 - **qwen_server/config.yaml**: Qwen server configuration (model, GPU, API key)
 - **qwen_server/prompts.yaml**: Analysis prompt templates for attributes
-- **.env**: API keys (AZURE_OPENAI_KEY)
+- **.env**: Environment variables for sensitive configuration (gitignored)
+  - `AZURE_OPENAI_ENDPOINT`: Azure OpenAI endpoint URL (overrides settings.yaml)
+  - `AZURE_OPENAI_KEY`: Azure OpenAI API key (overrides settings.yaml)
 - Never commit API keys or credentials to repository
+- Environment variables in `.env` take precedence over `settings.yaml` values
 
 ### Pipeline Stages (10-Stage Architecture)
 1. **shot_detection**: Identify scene boundaries using PySceneDetect
@@ -432,6 +435,147 @@ audio:
 - **qwen_server/README.md**: Detailed Qwen server setup, API, and troubleshooting
 - **audio_assets/README.md**: Music library setup and usage
 - **.clinerules**: This file - development guidelines for AI assistants
+
+## Utilities
+
+### Subtitle Parser (`utilities/subtitle_parser.py`)
+Pure subtitle parsing utility for extracting dialogue from SRT files. Can be used independently of the main pipeline.
+
+**Features:**
+- Parses SRT files with pysrt library
+- Extracts chronological dialogue with timestamps
+- Filters by minimum duration
+- Provides statistics (word count, duration, etc.)
+- Multiple output formats (plain text, timestamped, formatted)
+
+**Usage:**
+```python
+from utilities.subtitle_parser import SubtitleParser
+
+# Initialize and load
+parser = SubtitleParser(min_dialogue_duration=0.3)
+parser.load_srt('movie.srt')
+
+# Get statistics
+stats = parser.get_statistics()  # entries, words, duration
+
+# Get all entries
+entries = parser.get_all_entries()  # List of dicts with timestamps
+
+# Get full transcript
+transcript = parser.get_full_transcript(include_timestamps=True)
+
+# Get formatted subtitles
+formatted = parser.get_formatted_subtitles()  # List of formatted strings
+```
+
+**Used by:**
+- `11_story_graph_generator.py` - Story graph generation
+- `trailer_generator/ingest/subtitle_extractor.py` - Pipeline subtitle processing
+
+## Story Graph Generator (`11_story_graph_generator.py`)
+
+Standalone utility for generating comprehensive semantic story graphs from movies using GPT-4. Creates machine-readable JSON with characters, plot structure, scene timeline, and emotional arcs.
+
+**Required Inputs:**
+- Movie name (string)
+- Synopsis (text or file path)
+- Subtitles (SRT file path)
+
+**Output Structure:**
+```
+outputs/story_graphs/<sanitized_movie_name>/
+├── story_graph.json          # Main output
+├── input_synopsis.txt        # Saved synopsis
+├── input_subtitles.srt       # Copy of SRT
+├── metadata.json             # Generation metadata
+└── story_graph_generator.log # Detailed logs
+```
+
+**Usage Examples:**
+```bash
+# Basic usage
+python 11_story_graph_generator.py \
+  --movie-name "Dumb and Dumber" \
+  --synopsis "Two friends embark on a cross-country road trip..." \
+  --srt-file test_files/movie.srt
+
+# Synopsis from file
+python 11_story_graph_generator.py \
+  --movie-name "Movie Title" \
+  --synopsis synopsis.txt \
+  --srt-file movie.srt
+
+# Force overwrite
+python 11_story_graph_generator.py \
+  --movie-name "Movie" \
+  --synopsis "..." \
+  --srt-file movie.srt \
+  --force
+
+# Validate inputs only
+python 11_story_graph_generator.py \
+  --movie-name "Movie" \
+  --synopsis "..." \
+  --srt-file movie.srt \
+  --validate-only
+```
+
+**Features:**
+- Generates structured JSON with characters, plot, scenes, emotions
+- Automatic token management (truncates long subtitles: 30%/40%/30% strategy)
+- JSON schema validation
+- Caching strategy: overwrites on re-run
+- Processing time: ~30-60 seconds per movie
+
+**JSON Output Schema:**
+```json
+{
+  "title": "Movie Title",
+  "logline": "One-sentence summary",
+  "characters": [{
+    "name": "Character Name",
+    "description": "...",
+    "motivations": ["..."],
+    "relationships": {"Other": "relationship"}
+  }],
+  "major_themes": ["theme1", "theme2"],
+  "plot_structure": {
+    "setup": "...",
+    "inciting_incident": "...",
+    "rising_action": "...",
+    "climax": "...",
+    "resolution": "..."
+  },
+  "scene_timeline": [{
+    "scene_id": 1,
+    "start_time": "00:05:30",
+    "end_time": "00:07:15",
+    "summary": "...",
+    "key_events": ["..."],
+    "characters_present": ["..."],
+    "dominant_emotion": "tense",
+    "genre_indicators": ["..."],
+    "visual_inferences": ["indoor", "night"]
+  }],
+  "emotional_arc": [{
+    "scene_id": 1,
+    "emotion": "calm",
+    "intensity": 0.3
+  }]
+}
+```
+
+**Dependencies:**
+- Azure OpenAI API key (configured in `settings.yaml`)
+- `pysrt` library for subtitle parsing
+- Valid SRT file with subtitles
+- Synopsis (minimum 50 characters)
+
+**Core Modules:**
+- `trailer_generator/analysis/story_graph_generator.py` - Core generation logic
+- `utilities/subtitle_parser.py` - Subtitle parsing
+- `trailer_generator/narrative/azure_client.py` - GPT-4 integration
 
 ## Shell Scripts
 

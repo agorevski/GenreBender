@@ -128,7 +128,7 @@ class SubtitleParser:
                 lines.append(f"{timestamp} {entry['cleaned_text']}")
             return "\n".join(lines)
         else:
-            return " ".join(entry['cleaned_text'] for entry in self._parsed_entries)
+            return "\n".join(entry['cleaned_text'] for entry in self._parsed_entries)
     
     def get_formatted_subtitles(self) -> List[str]:
         """

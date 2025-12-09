@@ -7,38 +7,38 @@ project:
 
 # Processing settings
 processing:
-  target_trailer_length: 90  # seconds
+  target_trailer_length: 90                    # seconds
   shot_candidate_count: 60
-  max_batch_size: 10  # shots per batch
-  chunk_duration: 30  # seconds for shot detection
-  overlap: 5  # seconds overlap between chunks
+  max_batch_size: 10                           # shots per batch
+  chunk_duration: 30                           # seconds for shot detection
+  overlap: 5                                   # seconds overlap between chunks
 
 # Shot detection
 shot_detection:
-  threshold: 27.0  # PySceneDetect content threshold
-  min_shot_duration: 0.5  # seconds
-  max_shot_duration: 10.0  # seconds
-  frame_skip: 24 # Frame skip for faster detection (0=no skip, 1=every other frame, 2=every 3rd, etc.)
+  threshold: 27.0                              # PySceneDetect content threshold
+  min_shot_duration: 0.5                       # seconds
+  max_shot_duration: 10.0                      # seconds
+  frame_skip: 24                               # Frame skip for faster detection (0=no skip, 1=every other frame, 2=every 3rd, etc.)
 
 # Keyframe extraction
 keyframe:
-  quality: 95  # JPEG quality (1-100)
-  method: "middle"  # middle, best, or multiple
+  quality: 95                                  # JPEG quality (1-100)
+  method: "middle"                             # middle, best, or multiple
   # Performance optimizations
-  use_sequential_read: true      # Phase 1: Sequential reading (4-6x faster)
-  parallel_extraction: true       # Phase 2: Multi-process parallel (8-12x faster)
-  parallel_workers: 0             # Number of workers (0 = auto-detect CPU cores)
-  use_gpu_decode: true           # Phase 3: GPU-accelerated decode (15-25x faster)
-  gpu_device_id: 0               # GPU device to use (0 = first GPU)
-  prefetch_frames: 50            # Frame buffer size for sequential reading
+  use_sequential_read: true                    # Phase 1: Sequential reading (4-6x faster)
+  parallel_extraction: true                    # Phase 2: Multi-process parallel (8-12x faster)
+  parallel_workers: 0                          # Number of workers (0 = auto-detect CPU cores)
+  use_gpu_decode: true                         # Phase 3: GPU-accelerated decode (15-25x faster)
+  gpu_device_id: 0                             # GPU device to use (0 = first GPU)
+  prefetch_frames: 50                          # Frame buffer size for sequential reading
 
 # Remote analysis (Qwen2-VL server)
 remote_analysis:
   # Server connection
-  server_host: "localhost"           # Server hostname or IP
-  server_base_port: 8000             # Starting port for multi-server (8000, 8001, 8002, 8003)
-  server_count: 4                    # Number of servers (1=single-server, 4=multi-server for 4 GPUs)
-  api_key: "helloagorevski"          # API key for qwen_server authentication
+  server_host: "localhost"                     # Server hostname or IP
+  server_base_port: 8000                       # Starting port for multi-server (8000, 8001, 8002, 8003)
+  server_count: 4                              # Number of servers (1=single-server, 4=multi-server for 4 GPUs)
+  api_key: "helloagorevski"                    # API key for qwen_server authentication
   
   # Request settings
   timeout: 60
@@ -48,12 +48,12 @@ remote_analysis:
   cache_path: "cache/"
   
   # Multi-server settings (when server_count > 1)
-  load_balancing: "round_robin"      # Options: round_robin, random (round_robin recommended for even distribution)
+  load_balancing: "round_robin"                # Options: round_robin, random (round_robin recommended for even distribution)
   
   # Custom prompt (OPTIONAL - leave null to use qwen_server default)
   # If set, this prompt will override the server's configured prompt
   # See qwen_server/prompts.yaml for prompt format and examples
-  custom_prompt: null                # null = use server default, or provide custom prompt string
+  custom_prompt: null                          # null = use server default, or provide custom prompt string
 
 # Azure OpenAI
 azure_openai:
@@ -63,7 +63,7 @@ azure_openai:
   api_version: "2025-01-01-preview"
   max_retries: 3
   temperature: 0.7
-  max_completion_tokens: 4000  # Maximum tokens for completion
+  max_completion_tokens: 50000                 # Maximum tokens for completion
 
 # Video assembly settings (Stage 8)
 video:
@@ -72,20 +72,20 @@ video:
   codec: "libx264"
   bitrate: "5000k"
   preset: "medium"
-  transition_duration: 0.5  # seconds for crossfades
+  transition_duration: 0.5                     # seconds for crossfades
   enable_color_grading: true
   enable_transitions: true
   # AI Features
-  ai_title_generation: true  # Use GPT-4 for title card generation
-  ai_transition_selection: true  # Use GPT-4 for transition type selection
+  ai_title_generation: true                    # Use GPT-4 for title card generation
+  ai_transition_selection: true                # Use GPT-4 for transition type selection
 
 # Subtitle processing (Stage 3.5)
 subtitle_management:
-  enabled: true                       # Enable subtitle processing
-  srt_file: null                      # Path to SRT file (null = auto-detect from video name)
-  fallback_to_no_subtitles: true      # Continue without subtitles if SRT not found
-  min_dialogue_duration: 0.3          # Minimum subtitle duration (seconds) to consider
-  language: "en"                      # Primary language (for future multi-language support)
+  enabled: true                                # Enable subtitle processing
+  srt_file: null                               # Path to SRT file (null = auto-detect from video name)
+  fallback_to_no_subtitles: true               # Continue without subtitles if SRT not found
+  min_dialogue_duration: 0.3                   # Minimum subtitle duration (seconds) to consider
+  language: "en"                               # Primary language (for future multi-language support)
 
 # Audio mixing settings (Stage 9)
 audio:
@@ -94,12 +94,28 @@ audio:
   output_format: "aac"
   sample_rate: 48000
   bitrate: "192k"
-  ducking_threshold: -20  # dB threshold for ducking
-  ducking_ratio: 4  # Compression ratio for ducking
-  normalization_target: -14  # LUFS target for normalization
+  ducking_threshold: -20                      # dB threshold for ducking
+  ducking_ratio: 4                            # Compression ratio for ducking
+  normalization_target: -14                   # LUFS target for normalization
   # AI Features
-  ai_music_selection: false  # Use GPT-4 for music track selection
-  fallback_to_original_audio: true  # Use original audio if no music found
+  ai_music_selection: false                   # Use GPT-4 for music track selection
+  fallback_to_original_audio: true            # Use original audio if no music found
+
+# Story graph generation settings
+story_graph:
+  temperature: 0.3                            # Lower for more deterministic, higher for more creative
+  chunk_duration_minutes: 5                   # Duration of subtitle chunks (minutes)
+  overlap_seconds: 30                         # Overlap between chunks (seconds)
+  max_parallel_chunks: 7                      # Maximum concurrent chunk processing
+
+# OMDB API settings
+omdb:
+  api_key: "83fd90a1"                         # Free tier (1,000 requests/day)
+  base_url: "http://www.omdbapi.com/"
+  cache_enabled: true
+  cache_ttl: 2592000                          # 30 days in seconds
+  timeout: 10
+  max_retries: 3
 
 # Genre selection (default)
 genre: "thriller"
