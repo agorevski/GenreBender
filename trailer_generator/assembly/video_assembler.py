@@ -126,14 +126,19 @@ class VideoAssembler:
             raise ValueError("Timeline contains no shots")
         
         missing_shots = []
+        missing_durations = []
         for shot_data in timeline_shots:
             shot_id = shot_data.get('shot_id')
             shot_file = shots_dir / f"shot_{shot_id:04d}.mp4"
             if not shot_file.exists():
                 missing_shots.append(shot_id)
+            if 'duration' not in shot_data:
+                missing_durations.append(shot_id)
         
         if missing_shots:
             raise FileNotFoundError(f"Missing shot files: {missing_shots}")
+        if missing_durations:
+            raise ValueError(f"Timeline missing duration for shots: {missing_durations}")
         
         logger.info(f"Validated {len(timeline_shots)} shots")
     
@@ -151,49 +156,62 @@ class VideoAssembler:
         Returns:
             Path to output video
         """
-        logger.info("Using simple concatenation method...")
+        logger.info("Using simple concatenation method with per-shot trim...")
         
-        # Create concat demuxer file
-        concat_file = self.temp_dir / 'concat_list.txt'
         timeline_shots = timeline.get('timeline', [])
         
-        with open(concat_file, 'w') as f:
-            for shot_data in timeline_shots:
-                shot_id = shot_data.get('shot_id')
-                shot_file = shots_dir / f"shot_{shot_id:04d}.mp4"
-                # Concat format requires specific syntax
-                f.write(f"file '{shot_file.absolute()}'\n")
-                # Add duration if specified in timeline
-                if 'duration' in shot_data:
-                    f.write(f"duration {shot_data['duration']}\n")
+        # Build input list
+        inputs = []
+        for shot_data in timeline_shots:
+            shot_id = shot_data.get('shot_id')
+            shot_file = shots_dir / f"shot_{shot_id:04d}.mp4"
+            inputs.extend(['-i', str(shot_file)])
         
-        # Build FFmpeg command
-        cmd = [
-            'ffmpeg',
-            '-f', 'concat',
-            '-safe', '0',
-            '-i', str(concat_file),
+        # Build filter_complex to trim video/audio to timeline durations
+        filters = []
+        video_labels = []
+        audio_labels = []
+        color_filter = self.genre_profile.get('color_grade', {}).get('filter', '') if self.enable_color_grading else ''
+        
+        for idx, shot_data in enumerate(timeline_shots):
+            duration = shot_data.get('duration')
+            vf_chain = color_filter if color_filter else 'null'
+            filters.append(
+                f"[{idx}:v]{vf_chain},trim=duration={duration},setpts=PTS-STARTPTS[v{idx}]"
+            )
+            filters.append(
+                f"[{idx}:a]atrim=duration={duration},asetpts=PTS-STARTPTS[a{idx}]"
+            )
+            video_labels.append(f"v{idx}")
+            audio_labels.append(f"a{idx}")
+        
+        pair_labels = ''.join([f"[{v}][{a}]" for v, a in zip(video_labels, audio_labels)])
+        filters.append(
+            f"{pair_labels}concat=n={len(timeline_shots)}:v=1:a=1[outv][outa]"
+        )
+        
+        filter_complex = ';'.join(filters)
+        
+        cmd = ['ffmpeg']
+        cmd.extend(inputs)
+        cmd.extend([
+            '-filter_complex', filter_complex,
+            '-map', '[outv]',
+            '-map', '[outa]',
             '-c:v', self.codec,
             '-preset', self.preset,
             '-b:v', self.bitrate,
+            '-c:a', 'aac',
+            '-b:a', '192k',
             '-r', str(self.fps),
-            '-s', self.resolution
-        ]
-        
-        # Add color grading filter if enabled
-        if self.enable_color_grading:
-            color_filter = self.genre_profile.get('color_grade', {}).get('filter', '')
-            if color_filter:
-                cmd.extend(['-vf', color_filter])
-                logger.info(f"Applying color grading: {color_filter}")
-        
-        cmd.extend([
-            '-y',  # Overwrite output
+            '-s', self.resolution,
+            '-y',
             str(output_path)
         ])
         
-        # Execute FFmpeg
-        logger.info("Executing FFmpeg concatenation...")
+        logger.info("Executing FFmpeg filter_complex for simple concat...")
+        logger.debug(f"Filter complex: {filter_complex}")
+        
         try:
             result = subprocess.run(
                 cmd, 
@@ -201,7 +219,7 @@ class VideoAssembler:
                 capture_output=True, 
                 text=True
             )
-            logger.info("FFmpeg concatenation successful")
+            logger.info("FFmpeg concatenation with trim successful")
         except subprocess.CalledProcessError as e:
             logger.error(f"FFmpeg failed: {e.stderr}")
             raise
@@ -246,9 +264,12 @@ class VideoAssembler:
         cmd.extend([
             '-filter_complex', filter_complex,
             '-map', '[outv]',
+            '-map', '[outa]',  # Map audio output
             '-c:v', self.codec,
             '-preset', self.preset,
             '-b:v', self.bitrate,
+            '-c:a', 'aac',  # Encode audio as AAC
+            '-b:a', '192k',  # Audio bitrate
             '-r', str(self.fps),
             '-s', self.resolution,
             '-y',
@@ -293,24 +314,21 @@ class VideoAssembler:
         """
         filters = []
         
-        # Step 1: Apply color grading to each input if enabled
-        for i in range(len(timeline_shots)):
-            if self.enable_color_grading:
-                color_filter = self.genre_profile.get('color_grade', {}).get('filter', '')
-                if color_filter:
-                    filters.append(f"[{i}:v]{color_filter}[v{i}]")
-                else:
-                    filters.append(f"[{i}:v]null[v{i}]")
-            else:
-                filters.append(f"[{i}:v]null[v{i}]")
+        # Step 1: Apply color grading (if enabled) and trim each input to timeline duration
+        color_filter = self.genre_profile.get('color_grade', {}).get('filter', '') if self.enable_color_grading else ''
+        for i, shot_data in enumerate(timeline_shots):
+            duration = shot_data.get('duration')
+            vf_chain = color_filter if color_filter else 'null'
+            filters.append(f"[{i}:v]{vf_chain},trim=duration={duration},setpts=PTS-STARTPTS[v{i}]")
+            filters.append(f"[{i}:a]atrim=duration={duration},asetpts=PTS-STARTPTS[a{i}]")
         
         # Step 2: Apply transitions between consecutive shots
         if not transitions:
-            # No transitions: just concatenate
-            input_labels = ''.join([f"[v{i}]" for i in range(len(timeline_shots))])
-            filters.append(f"{input_labels}concat=n={len(timeline_shots)}:v=1:a=0[outv]")
+            # No transitions: just concatenate trimmed video and audio
+            pair_labels = ''.join([f"[v{i}][a{i}]" for i in range(len(timeline_shots))])
+            filters.append(f"{pair_labels}concat=n={len(timeline_shots)}:v=1:a=1[outv][outa]")
         else:
-            # Build xfade filter chain
+            # Build xfade filter chain for video
             current_label = "v0"
             
             for i, trans in enumerate(transitions):
@@ -339,6 +357,10 @@ class VideoAssembler:
                 )
                 
                 current_label = output_label
+            
+            # Concatenate trimmed audio streams (no transitions for audio)
+            audio_labels = ''.join([f"[a{i}]" for i in range(len(timeline_shots))])
+            filters.append(f"{audio_labels}concat=n={len(timeline_shots)}:v=0:a=1[outa]")
         
         # Combine all filters
         filter_string = ';'.join(filters)

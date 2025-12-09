@@ -104,9 +104,9 @@ def main():
     parser.add_argument('--test', action='store_true', help='Run in test mode with sample validation')
     parser.add_argument('--skip-analysis', action='store_true', help='Skip remote analysis (use cached results)')
     parser.add_argument('--no-cache', action='store_true', help='Disable analysis caching')
-    parser.add_argument('--resume-from', type=str, choices=['shot_detection', 'keyframe_extraction', 'audio_extraction', 'remote_analysis', 'genre_scoring', 'shot_selection', 'narrative_generation'], help='Resume from specific stage')
+    parser.add_argument('--resume-from', type=str, choices=['shot_detection', 'keyframe_extraction', 'audio_extraction', 'subtitle_management', 'remote_analysis', 'genre_scoring', 'shot_selection', 'narrative_generation', 'video_assembly', 'audio_mixing'], help='Resume from specific stage')
     parser.add_argument('--skip-clean', action='store_true', help='Skip cleaning output directory (useful for resume)')
-    parser.add_argument('--force-stage', type=str, choices=['shot_detection', 'keyframe_extraction', 'audio_extraction', 'remote_analysis', 'genre_scoring', 'shot_selection', 'narrative_generation'], help='Force re-run of specific stage')
+    parser.add_argument('--force-stage', type=str, choices=['shot_detection', 'keyframe_extraction', 'audio_extraction', 'subtitle_management', 'remote_analysis', 'genre_scoring', 'shot_selection', 'narrative_generation', 'video_assembly', 'audio_mixing'], help='Force re-run of specific stage')
     parser.add_argument('--reset-checkpoint', action='store_true', help='Reset checkpoint and start fresh')
     args = parser.parse_args()
     for key, value in vars(args).items():
@@ -286,9 +286,9 @@ def main():
             'features_extracted': sum(1 for s in shots if s.get('audio_features'))
         })
     
-    # ========== STEP 3.5: SUBTITLE MANAGEMENT ==========
+    # ========== STEP 4: SUBTITLE MANAGEMENT ==========
     logger.info("=" * 60)
-    logger.info("STEP 3.5: Subtitle Management (SRT Processing)")
+    logger.info("STEP 4: Subtitle Management (SRT Processing)")
     logger.info("=" * 60)
     
     force_subtitle = args.force_stage == 'subtitle_management'
@@ -347,10 +347,10 @@ def main():
             save_shots_to_metadata(shots, shot_metadata_path, args.input)
             checkpoint.mark_stage_completed('subtitle_management', {'subtitles_processed': False})
     
-    # ========== STEP 4: REMOTE ANALYSIS ==========
+    # ========== STEP 5: REMOTE ANALYSIS ==========
     force_analysis = args.force_stage == 'remote_analysis'
     logger.info("=" * 60)
-    logger.info("STEP 4: Multimodal Analysis (Qwen2-VL)")
+    logger.info("STEP 5: Multimodal Analysis (Qwen2-VL)")
     logger.info("=" * 60)
     if not args.skip_analysis and not checkpoint.should_skip_stage('remote_analysis', force=force_analysis):
         
@@ -415,9 +415,9 @@ def main():
     else:
         logger.info("Skipping analysis (--skip-analysis flag)")
     
-    # ========== STEP 5: GENRE SCORING ==========
+    # ========== STEP 6: GENRE SCORING ==========
     logger.info("=" * 60)
-    logger.info("STEP 5: Genre-Based Scoring")
+    logger.info("STEP 6: Genre-Based Scoring")
     logger.info("=" * 60)
     
     force_scoring = args.force_stage == 'genre_scoring'
@@ -434,9 +434,9 @@ def main():
             'scored_count': sum(1 for s in shots if 'genre_score' in s)
         })
     
-    # ========== STEP 6: SHOT SELECTION ==========
+    # ========== STEP 7: SHOT SELECTION ==========
     logger.info("=" * 60)
-    logger.info("STEP 6: Shot Selection")
+    logger.info("STEP 7: Shot Selection")
     logger.info("=" * 60)
     
     force_selection = args.force_stage == 'shot_selection'
@@ -470,9 +470,9 @@ def main():
             'selected_count': len(top_shots)
         })
     
-    # ========== STEP 7: NARRATIVE GENERATION ==========
+    # ========== STEP 8: NARRATIVE GENERATION ==========
     logger.info("=" * 60)
-    logger.info("STEP 7: Narrative Structure Generation (Azure OpenAI)")
+    logger.info("STEP 8: Narrative Structure Generation (Azure OpenAI)")
     logger.info("=" * 60)
     
     timeline_path = output_dir / 'timeline.json'
@@ -517,16 +517,16 @@ def main():
             'duration': timeline.get('total_duration', 0)
         })
     
-    # ========== STEP 8: VIDEO ASSEMBLY ==========
+    # ========== STEP 9: VIDEO ASSEMBLY ==========
     logger.info("=" * 60)
-    logger.info("STEP 8: Video Assembly & Color Grading")
+    logger.info("STEP 9: Video Assembly & Color Grading")
     logger.info("=" * 60)
     logger.info("NOTE: Video assembly module to be implemented")
     logger.info("Timeline exported to: output/timeline.json")
     
-    # ========== STEP 9: AUDIO MIXING ==========
+    # ========== STEP 10: AUDIO MIXING ==========
     logger.info("=" * 60)
-    logger.info("STEP 9: Audio Mixing")
+    logger.info("STEP 10: Audio Mixing")
     logger.info("=" * 60)
     logger.info("NOTE: Audio mixing module to be implemented")
     

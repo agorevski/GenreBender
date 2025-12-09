@@ -20,6 +20,7 @@ class CheckpointManager:
         'shot_detection',
         'keyframe_extraction',
         'audio_extraction',
+        'subtitle_management',
         'remote_analysis',
         'genre_scoring',
         'shot_selection',

@@ -1,7 +1,7 @@
 # GenreBender - AI-Powered Trailer Generator
 
 ## Project Overview
-GenreBender is a sophisticated system for automatically generating cinematic trailers from full-length movies with genre transformation (e.g., turn a drama into a thriller trailer). It uses a complete 9-stage modular pipeline combining computer vision, audio analysis, multimodal AI (Qwen2-VL), GPT-4 for narrative generation, and FFmpeg for video assembly and audio mixing.
+GenreBender is a sophisticated system for automatically generating cinematic trailers from full-length movies with genre transformation (e.g., turn a drama into a thriller trailer). It uses a complete 10-stage modular pipeline combining computer vision, audio analysis, multimodal AI (Qwen2-VL), GPT-4 for narrative generation, and FFmpeg for video assembly and audio mixing.
 
 ## Technology Stack
 - **Python**: 3.9+ (primary language)
@@ -19,12 +19,13 @@ GenreBender/
 ├── 1_shot_detection.py               # Stage 1 standalone script
 ├── 2_keyframe_extraction.py          # Stage 2 standalone script
 ├── 3_audio_extraction.py             # Stage 3 standalone script
-├── 4_remote_analysis.py              # Stage 4 standalone script
-├── 5_genre_scoring.py                # Stage 5 standalone script
-├── 6_shot_selection.py               # Stage 6 standalone script
-├── 7_narrative_generation.py         # Stage 7 standalone script
-├── 8_video_assembly.py               # Stage 8 standalone script
-├── 9_audio_mixing.py                 # Stage 9 standalone script
+├── 4_subtitle_management.py          # Stage 4 standalone script
+├── 5_remote_analysis.py              # Stage 5 standalone script
+├── 6_genre_scoring.py                # Stage 6 standalone script
+├── 7_shot_selection.py               # Stage 7 standalone script
+├── 8_narrative_generation.py         # Stage 8 standalone script
+├── 9_video_assembly.py               # Stage 9 standalone script
+├── 10_audio_mixing.py                # Stage 10 standalone script
 ├── pipeline_common.py                # Shared utilities for standalone scripts
 ├── requirements.txt                  # Python dependencies
 ├── .env                              # API keys (not in repo)
@@ -110,17 +111,17 @@ GenreBender/
 - **.env**: API keys (AZURE_OPENAI_KEY)
 - Never commit API keys or credentials to repository
 
-### Pipeline Stages (9-Stage Architecture)
+### Pipeline Stages (10-Stage Architecture)
 1. **shot_detection**: Identify scene boundaries using PySceneDetect
 2. **keyframe_extraction**: Extract 5 frames per shot for temporal analysis
 3. **audio_extraction**: Extract MFCC, spectral centroid, RMS energy features
-3.5. **subtitle_management**: Parse SRT files and map dialogue to shots
-4. **remote_analysis**: Multimodal analysis via Qwen2-VL server
-5. **genre_scoring**: Score shots based on genre profile weights
-6. **shot_selection**: Select top N shots (default: 60)
-7. **narrative_generation**: Generate coherent timeline with GPT-4 (enhanced with dialogue context)
-8. **video_assembly**: Assemble video with color grading and transitions
-9. **audio_mixing**: Mix music with audio ducking and normalization
+4. **subtitle_management**: Parse SRT files and map dialogue to shots
+5. **remote_analysis**: Multimodal analysis via Qwen2-VL server
+6. **genre_scoring**: Score shots based on genre profile weights
+7. **shot_selection**: Select top N shots (default: 60)
+8. **narrative_generation**: Generate coherent timeline with GPT-4 (enhanced with dialogue context)
+9. **video_assembly**: Assemble video with color grading and transitions
+10. **audio_mixing**: Mix music with audio ducking and normalization
 
 ## Common Workflows
 
@@ -153,15 +154,16 @@ python main.py --input movie.mp4 --genre thriller --reset-checkpoint
 python 1_shot_detection.py --input movie.mp4 --genre thriller
 python 2_keyframe_extraction.py --input movie.mp4 --genre thriller
 python 3_audio_extraction.py --input movie.mp4 --genre thriller
-python 4_remote_analysis.py --input movie.mp4 --genre thriller
-python 5_genre_scoring.py --input movie.mp4 --genre thriller
-python 6_shot_selection.py --input movie.mp4 --genre thriller
-python 7_narrative_generation.py --input movie.mp4 --genre thriller
-python 8_video_assembly.py --input movie.mp4 --genre thriller
-python 9_audio_mixing.py --input movie.mp4 --genre thriller
+python 4_subtitle_management.py --input movie.mp4 --genre thriller
+python 5_remote_analysis.py --input movie.mp4 --genre thriller
+python 6_genre_scoring.py --input movie.mp4 --genre thriller
+python 7_shot_selection.py --input movie.mp4 --genre thriller
+python 8_narrative_generation.py --input movie.mp4 --genre thriller
+python 9_video_assembly.py --input movie.mp4 --genre thriller
+python 10_audio_mixing.py --input movie.mp4 --genre thriller
 
 # Use --force to re-run a specific stage
-python 5_genre_scoring.py --input movie.mp4 --genre horror --force
+python 6_genre_scoring.py --input movie.mp4 --genre horror --force
 
 # Use --test for quick validation
 python 1_shot_detection.py --input clip.mp4 --genre action --test
@@ -190,8 +192,8 @@ All outputs for a video are organized in `outputs/<sanitized_filename>/`:
 - **shots/shot_metadata.json**: Complete shot information with analysis
 - **output/timeline.json**: Narrative timeline structure
 - **output/selected_shots.json**: Top-scored shots before timeline generation
-- **output/trailer_assembled.mp4**: Stage 8 output (video without final audio)
-- **output/trailer_final.mp4**: Stage 9 output (FINAL broadcast-ready trailer)
+- **output/trailer_assembled.mp4**: Stage 9 output (video without final audio)
+- **output/trailer_final.mp4**: Stage 10 output (FINAL broadcast-ready trailer)
 - **checkpoint.json**: Pipeline state for resuming
 - **trailer_generator.log**: Detailed execution logs
 - **cache/analysis_cache.json**: Cached multimodal analysis results
@@ -393,7 +395,7 @@ cat qwen_server/.server_pids
 8. **Document API changes** if modifying server interfaces
 9. **Test resume functionality** after pipeline modifications
 10. **Keep output structure consistent** - external tools may depend on it
-11. **Verify Qwen server is running** before executing stage 4 (remote_analysis)
+11. **Verify Qwen server is running** before executing stage 5 (remote_analysis)
 12. **Use standalone scripts** for debugging specific stages
 13. **Check authentication tokens** when modifying Qwen server interactions
 14. **Monitor GPU memory** when processing large batches
@@ -463,7 +465,7 @@ cd qwen_server && ./setup.sh
 - Logging setup
 - File path utilities
 
-Used by all standalone stage scripts (1_*.py through 9_*.py) to ensure consistency.
+Used by all standalone stage scripts (1_*.py through 10_*.py) to ensure consistency.
 
 ## Future Enhancement Notes
 - Title card overlay rendering (drawtext filter)

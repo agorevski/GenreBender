@@ -13,7 +13,7 @@ GenreBender transforms full-length movies into compelling trailers by:
 4. Assembling video with transitions and color grading
 5. Mixing audio with music and effects
 
-The system processes movies through a complete 9-stage pipeline, with intelligent caching and checkpoint support for resumable processing.
+The system processes movies through a complete 10-stage pipeline, with intelligent caching and checkpoint support for resumable processing.
 
 ## 🏗️ Pipeline Stages
 
@@ -22,12 +22,13 @@ The system processes movies through a complete 9-stage pipeline, with intelligen
 | 1. Shot Detection | Identifies scene boundaries in video | PySceneDetect |
 | 2. Keyframe Extraction | Extracts 5 frames per shot for temporal analysis | FFmpeg |
 | 3. Audio Extraction | Analyzes audio features (MFCC, spectral, temporal) | librosa |
-| 4. Multimodal Analysis | Understands visual + audio content | Qwen2-VL |
-| 5. Genre Scoring | Scores shots based on target genre profile | Custom algorithm |
-| 6. Shot Selection | Selects top candidates for trailer | Ranking system |
-| 7. Narrative Generation | Creates compelling trailer structure | Azure OpenAI GPT-4 |
-| 8. Video Assembly | Assembles video with color grading & transitions | FFmpeg |
-| 9. Audio Mixing | Mixes music with audio ducking & normalization | FFmpeg |
+| 4. Subtitle Management | Parses SRT files and maps dialogue to shots | pysrt |
+| 5. Multimodal Analysis | Understands visual + audio content | Qwen2-VL |
+| 6. Genre Scoring | Scores shots based on target genre profile | Custom algorithm |
+| 7. Shot Selection | Selects top candidates for trailer | Ranking system |
+| 8. Narrative Generation | Creates compelling trailer structure | Azure OpenAI GPT-4 |
+| 9. Video Assembly | Assembles video with color grading & transitions | FFmpeg |
+| 10. Audio Mixing | Mixes music with audio ducking & normalization | FFmpeg |
 
 ## 📋 Prerequisites
 
@@ -105,6 +106,7 @@ Use with `--resume-from` or `--force-stage`:
 - `shot_detection`
 - `keyframe_extraction`
 - `audio_extraction`
+- `subtitle_management`
 - `remote_analysis`
 - `genre_scoring`
 - `shot_selection`
@@ -145,8 +147,8 @@ outputs/<sanitized_filename>/
 ├── output/
 │   ├── timeline.json
 │   ├── selected_shots.json
-│   ├── trailer_assembled.mp4    # Stage 8 output
-│   └── trailer_final.mp4         # Stage 9 output (FINAL)
+│   ├── trailer_assembled.mp4    # Stage 9 output
+│   └── trailer_final.mp4         # Stage 10 output (FINAL)
 ├── temp/
 │   └── partial_analysis.json
 ├── checkpoint.json
@@ -259,7 +261,7 @@ pip install librosa soundfile
 ## 📝 Implementation Status
 
 ### ✅ Completed
-- Complete 9-stage processing pipeline
+- Complete 10-stage processing pipeline
 - Multi-frame + audio multimodal analysis
 - Intelligent caching and checkpointing
 - Genre-configurable scoring
