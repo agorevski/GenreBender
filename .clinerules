@@ -114,10 +114,11 @@ GenreBender/
 1. **shot_detection**: Identify scene boundaries using PySceneDetect
 2. **keyframe_extraction**: Extract 5 frames per shot for temporal analysis
 3. **audio_extraction**: Extract MFCC, spectral centroid, RMS energy features
+3.5. **subtitle_management**: Parse SRT files and map dialogue to shots
 4. **remote_analysis**: Multimodal analysis via Qwen2-VL server
 5. **genre_scoring**: Score shots based on genre profile weights
 6. **shot_selection**: Select top N shots (default: 60)
-7. **narrative_generation**: Generate coherent timeline with GPT-4
+7. **narrative_generation**: Generate coherent timeline with GPT-4 (enhanced with dialogue context)
 8. **video_assembly**: Assemble video with color grading and transitions
 9. **audio_mixing**: Mix music with audio ducking and normalization
 

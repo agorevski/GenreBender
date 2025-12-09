@@ -6,5 +6,6 @@ from .shot_detector import ShotDetector
 from .keyframe_extractor import KeyframeExtractor
 from .batch_processor import BatchProcessor
 from .audio_extractor import AudioExtractor
+from .subtitle_extractor import SubtitleExtractor
 
-__all__ = ['ShotDetector', 'KeyframeExtractor', 'BatchProcessor', 'AudioExtractor']
+__all__ = ['ShotDetector', 'KeyframeExtractor', 'BatchProcessor', 'AudioExtractor', 'SubtitleExtractor']

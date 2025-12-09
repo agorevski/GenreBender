@@ -68,6 +68,11 @@ class TimelineGenerator:
         # Add duration constraint
         prompt += f"\n\nTarget trailer duration: {target_duration} seconds"
         
+        # Add dialogue guidance if dialogue is present
+        has_dialogue = any(s.get('subtitles', {}).get('has_dialogue', False) for s in shots)
+        if has_dialogue:
+            prompt += "\n\nNOTE: Some shots contain dialogue. Consider using actual dialogue lines for text overlays to create authentic, character-driven narrative moments."
+        
         messages = [
             {
                 "role": "system",

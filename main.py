@@ -15,7 +15,7 @@ from typing import Dict
 from dotenv import load_dotenv
 
 # Import modules
-from trailer_generator.ingest import ShotDetector, KeyframeExtractor, BatchProcessor, AudioExtractor
+from trailer_generator.ingest import ShotDetector, KeyframeExtractor, BatchProcessor, AudioExtractor, SubtitleExtractor
 from trailer_generator.analysis import RemoteAnalyzer, AnalysisCache, GenreScorer, ShotSelector
 from trailer_generator.narrative import AzureOpenAIClient, TimelineGenerator
 from trailer_generator.checkpoint import CheckpointManager, load_shots_from_metadata, save_shots_to_metadata
@@ -285,6 +285,67 @@ def main():
         checkpoint.mark_stage_completed('audio_extraction', {
             'features_extracted': sum(1 for s in shots if s.get('audio_features'))
         })
+    
+    # ========== STEP 3.5: SUBTITLE MANAGEMENT ==========
+    logger.info("=" * 60)
+    logger.info("STEP 3.5: Subtitle Management (SRT Processing)")
+    logger.info("=" * 60)
+    
+    force_subtitle = args.force_stage == 'subtitle_management'
+    subtitle_config = config.get('subtitle_management', {})
+    
+    if checkpoint.should_skip_stage('subtitle_management', force=force_subtitle):
+        logger.info("⏭️  Skipping subtitle management (already completed)")
+        shots = load_shots_from_metadata(shot_metadata_path)
+    else:
+        if subtitle_config.get('enabled', True):
+            subtitle_extractor = SubtitleExtractor(
+                min_dialogue_duration=subtitle_config.get('min_dialogue_duration', 0.3)
+            )
+            
+            # Find SRT file
+            srt_path = subtitle_extractor.find_srt_file(args.input, subtitle_config.get('srt_file'))
+            
+            if srt_path:
+                # Load and map subtitles
+                subtitles = subtitle_extractor.load_srt(srt_path)
+                if subtitles:
+                    shots = subtitle_extractor.map_to_shots(subtitles, shots)
+                    summary = subtitle_extractor.get_dialogue_summary(shots)
+                    logger.info(f"Mapped subtitles: {summary['dialogue_shots']}/{summary['total_shots']} shots have dialogue")
+                    logger.info(f"Coverage: {summary['dialogue_coverage']:.1%}, Total words: {summary['total_words']}")
+                    
+                    # Save and checkpoint
+                    save_shots_to_metadata(shots, shot_metadata_path, args.input)
+                    checkpoint.mark_stage_completed('subtitle_management', {
+                        'subtitles_processed': True,
+                        'dialogue_shots': summary['dialogue_shots']
+                    })
+                else:
+                    logger.warning("Failed to load SRT file, continuing without subtitles")
+                    # Add empty subtitle data
+                    for shot in shots:
+                        shot['subtitles'] = {'has_dialogue': False, 'dialogue': None, 'subtitle_entries': [], 'word_count': 0, 'dialogue_density': 0.0, 'emotional_markers': {'questions': 0, 'exclamations': 0, 'all_caps_words': 0}}
+                    save_shots_to_metadata(shots, shot_metadata_path, args.input)
+                    checkpoint.mark_stage_completed('subtitle_management', {'subtitles_processed': False})
+            else:
+                if subtitle_config.get('fallback_to_no_subtitles', True):
+                    logger.info("No SRT file found, continuing without subtitles")
+                    # Add empty subtitle data
+                    for shot in shots:
+                        shot['subtitles'] = {'has_dialogue': False, 'dialogue': None, 'subtitle_entries': [], 'word_count': 0, 'dialogue_density': 0.0, 'emotional_markers': {'questions': 0, 'exclamations': 0, 'all_caps_words': 0}}
+                    save_shots_to_metadata(shots, shot_metadata_path, args.input)
+                    checkpoint.mark_stage_completed('subtitle_management', {'subtitles_processed': False})
+                else:
+                    logger.error("No SRT file found and fallback disabled")
+                    sys.exit(1)
+        else:
+            logger.info("Subtitle processing disabled in configuration")
+            # Add empty subtitle data
+            for shot in shots:
+                shot['subtitles'] = {'has_dialogue': False, 'dialogue': None, 'subtitle_entries': [], 'word_count': 0, 'dialogue_density': 0.0, 'emotional_markers': {'questions': 0, 'exclamations': 0, 'all_caps_words': 0}}
+            save_shots_to_metadata(shots, shot_metadata_path, args.input)
+            checkpoint.mark_stage_completed('subtitle_management', {'subtitles_processed': False})
     
     # ========== STEP 4: REMOTE ANALYSIS ==========
     force_analysis = args.force_stage == 'remote_analysis'

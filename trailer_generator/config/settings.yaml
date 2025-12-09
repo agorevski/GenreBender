@@ -79,6 +79,14 @@ video:
   ai_title_generation: true  # Use GPT-4 for title card generation
   ai_transition_selection: true  # Use GPT-4 for transition type selection
 
+# Subtitle processing (Stage 3.5)
+subtitle_management:
+  enabled: true                       # Enable subtitle processing
+  srt_file: null                      # Path to SRT file (null = auto-detect from video name)
+  fallback_to_no_subtitles: true      # Continue without subtitles if SRT not found
+  min_dialogue_duration: 0.3          # Minimum subtitle duration (seconds) to consider
+  language: "en"                      # Primary language (for future multi-language support)
+
 # Audio mixing settings (Stage 9)
 audio:
   music_library_path: "audio_assets/music/"

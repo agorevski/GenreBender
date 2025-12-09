@@ -174,7 +174,7 @@ Return ONLY valid JSON in this exact format:
     @classmethod
     def format_shot_descriptions(cls, shots: List[Dict], max_shots: int = 30) -> str:
         """
-        Format shot descriptions for prompt.
+        Format shot descriptions for prompt, including dialogue when available.
         
         Args:
             shots: List of shot dictionaries with analysis
@@ -194,7 +194,34 @@ Return ONLY valid JSON in this exact format:
             analysis = shot.get('analysis', {})
             caption = analysis.get('caption', 'No description')
             
+            # Start with basic description
             desc = f"Shot {shot_id}: {caption} (score: {score:.2f}, duration: {duration:.1f}s)"
+            
+            # Add dialogue if available
+            subtitles = shot.get('subtitles', {})
+            if subtitles.get('has_dialogue'):
+                dialogue = subtitles.get('dialogue', '')
+                word_count = subtitles.get('word_count', 0)
+                emotional_markers = subtitles.get('emotional_markers', {})
+                
+                # Truncate very long dialogue
+                if len(dialogue) > 100:
+                    dialogue = dialogue[:97] + "..."
+                
+                desc += f"\n  Dialogue: \"{dialogue}\""
+                
+                # Add emotional markers if present
+                markers = []
+                if emotional_markers.get('questions', 0) > 0:
+                    markers.append(f"{emotional_markers['questions']} question(s)")
+                if emotional_markers.get('exclamations', 0) > 0:
+                    markers.append(f"{emotional_markers['exclamations']} exclamation(s)")
+                if emotional_markers.get('all_caps_words', 0) > 0:
+                    markers.append(f"{emotional_markers['all_caps_words']} emphasized word(s)")
+                
+                if markers:
+                    desc += f"\n  Emotional markers: {', '.join(markers)}"
+            
             descriptions.append(desc)
         
         return "\n".join(descriptions)
