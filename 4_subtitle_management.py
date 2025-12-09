@@ -90,7 +90,7 @@ def main():
     
     # Initialize subtitle extractor
     subtitle_extractor = SubtitleExtractor(
-        min_dialogue_duration=subtitle_config.get('min_dialogue_duration', 0.3)
+        min_dialogue_duration=subtitle_config.get('min_dialogue_duration')
     )
     
     # Find SRT file

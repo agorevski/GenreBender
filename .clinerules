@@ -30,7 +30,6 @@ GenreBender/
 ├── requirements.txt                  # Python dependencies
 ├── .env                              # API keys (not in repo)
 ├── README.md                         # Main project documentation
-├── PIPELINE_STAGES.md                # Stage-by-stage execution guide
 ├── qwen_server/                      # Qwen2-VL server implementation
 │   ├── server.py                     # FastAPI server for multimodal analysis
 │   ├── analyzer.py                   # Core analysis logic with multi-frame processing
@@ -431,7 +430,6 @@ audio:
 ## Documentation Files
 
 - **README.md**: Main project overview and quick start
-- **PIPELINE_STAGES.md**: Comprehensive guide for stage-by-stage execution
 - **qwen_server/README.md**: Detailed Qwen server setup, API, and troubleshooting
 - **audio_assets/README.md**: Music library setup and usage
 - **.clinerules**: This file - development guidelines for AI assistants
@@ -473,7 +471,7 @@ formatted = parser.get_formatted_subtitles()  # List of formatted strings
 - `11_story_graph_generator.py` - Story graph generation
 - `trailer_generator/ingest/subtitle_extractor.py` - Pipeline subtitle processing
 
-## Story Graph Generator (`11_story_graph_generator.py`)
+## Story Graph Generator - Stage 11 (`11_story_graph_generator.py`)
 
 Standalone utility for generating comprehensive semantic story graphs from movies using GPT-4. Creates machine-readable JSON with characters, plot structure, scene timeline, and emotional arcs.
 
@@ -599,6 +597,122 @@ cd qwen_server && ./setup.sh
 ./stop_server.sh
 ```
 
+## Beat Sheet Generator - Stage 12 / Layer 2.2 (`12_beat_sheet_generator.py`)
+
+Transforms story graphs into genre-specific trailer beat sheets through two-stage LLM processing. This is **Layer 2.2** of the genre transformation pipeline, producing structured beats for automated scene retrieval.
+
+**Required Inputs:**
+- Story graph from Stage 11 (`story_graph.json`)
+- Target genre selection
+
+**Output Structure:**
+```
+outputs/story_graphs/<movie_name>/
+├── story_graph.json          # Stage 11 input
+├── genre_rewrite.json        # Stage 1 output (intermediate)
+├── beats.json                # Stage 2 output (final)
+├── metadata_beats.json       # Generation metadata
+└── beat_sheet_generator.log  # Detailed logs
+```
+
+**Usage Examples:**
+```bash
+# Basic usage
+python 12_beat_sheet_generator.py \
+  --movie-name "Airplane!" \
+  --target-genre thriller
+
+# Force regeneration
+python 12_beat_sheet_generator.py \
+  --movie-name "Airplane!" \
+  --target-genre horror \
+  --force
+
+# Custom temperature
+python 12_beat_sheet_generator.py \
+  --movie-name "Movie" \
+  --target-genre action \
+  --temperature 0.8
+
+# Validate only
+python 12_beat_sheet_generator.py \
+  --movie-name "Movie" \
+  --target-genre drama \
+  --validate-only
+```
+
+**Two-Stage Process:**
+
+1. **Genre Reinterpretation (LLM Call 1)**
+   - Reframes the original movie in the target genre
+   - Transforms tone, conflict, and emotional arc
+   - Preserves core plot and characters
+   - Outputs: `genre_rewrite.json` with:
+     - new_genre, logline, primary_conflict
+     - antagonistic_forces, genre_motifs
+     - tone_profile (pace, visual_tone, sound_profile)
+     - emotional_arc_transformed (opening → build → climax → resolution)
+
+2. **Beat Sheet Generation (LLM Call 2)**
+   - Creates 8-12 trailer beats from reinterpretation
+   - Each beat includes:
+     - id, name, description
+     - target_emotion
+     - visual_requirements (3-5 items)
+     - audio_cue
+     - voiceover (optional)
+     - **embedding_prompt** (dense text for Layer 2.3 retrieval)
+   - Follows standard trailer structure: hook → setup → conflict → escalation → climax
+
+**Configuration (`settings.yaml`):**
+```yaml
+beat_sheet:
+  temperature: 0.7              # LLM creativity (0.0-1.0)
+  min_beats: 8                  # Minimum trailer beats
+  max_beats: 12                 # Maximum trailer beats
+  target_duration: 90           # Target trailer length (seconds)
+  embedding_model: "text-embedding-ada-002"  # For Layer 2.3
+  embedding_batch_size: 10      # Batch size for embeddings
+```
+
+**Features:**
+- Two-stage LLM processing with structured JSON output
+- Automatic genre context loading from `genre_profiles.yaml`
+- Validates 8-12 beats, 3-5 visual requirements per beat
+- Saves intermediate `genre_rewrite.json` for debugging
+- Rich embedding prompts (50+ words) for semantic scene matching
+- Processing time: ~10-20 seconds per beat sheet
+
+**Core Module:**
+- `trailer_generator/narrative/beat_sheet_generator.py` - Two-stage generator
+  - `BeatSheetGenerator` class
+  - `generate_beat_sheet()` - Main entry point
+  - `_stage1_genre_reinterpretation()` - LLM Call 1
+  - `_stage2_beat_sheet_generation()` - LLM Call 2
+  - `_validate_beat_sheet()` - Schema validation
+  - `_generate_embeddings()` - Placeholder for Layer 2.3
+
+**Dependencies:**
+- Azure OpenAI API key (configured in `settings.yaml`)
+- Story graph from Stage 11
+- Python: `openai`, `pyyaml` (already in requirements.txt)
+
+**Integration Flow:**
+```
+Stage 11: Story Graph → Stage 12: Beat Sheet → Layer 2.3: Scene Retrieval
+                         ↓
+                   genre_rewrite.json (intermediate)
+                   beats.json (with embedding prompts)
+                         ↓
+                   [Future: Semantic scene matching with embeddings]
+```
+
+**Common Issues:**
+- **"Story graph not found"**: Run Stage 11 first
+- **"Unsupported genre"**: Check `genre_profiles.yaml` for valid genres
+- **Empty JSON response**: Verify Azure OpenAI configuration and `max_completion_tokens`
+- **Beat count validation error**: Adjust `min_beats`/`max_beats` in settings.yaml
+
 ## Shared Utilities
 
 **pipeline_common.py**: Shared utilities for standalone stage scripts
@@ -609,7 +723,7 @@ cd qwen_server && ./setup.sh
 - Logging setup
 - File path utilities
 
-Used by all standalone stage scripts (1_*.py through 10_*.py) to ensure consistency.
+Used by all standalone stage scripts (1_*.py through 11_*.py) and beat sheet generator (12_*.py) to ensure consistency.
 
 ## Future Enhancement Notes
 - Title card overlay rendering (drawtext filter)

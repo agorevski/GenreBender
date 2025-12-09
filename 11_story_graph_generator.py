@@ -257,10 +257,10 @@ Examples:
     
     # Get story graph configuration
     story_graph_config = config.get('story_graph', {})
-    chunk_duration_minutes = story_graph_config.get('chunk_duration_minutes', 15)
-    overlap_seconds = story_graph_config.get('overlap_seconds', 30)
-    max_parallel_chunks = story_graph_config.get('max_parallel_chunks', 5)
-    story_graph_temperature = story_graph_config.get('temperature', 0.3)
+    chunk_duration_minutes = story_graph_config.get('chunk_duration_minutes')
+    overlap_seconds = story_graph_config.get('overlap_seconds')
+    max_parallel_chunks = story_graph_config.get('max_parallel_chunks')
+    story_graph_temperature = story_graph_config.get('temperature')
     
     # Get synthesis token limit from Azure config
     synthesis_max_tokens = azure_config.get('max_completion_tokens')
@@ -274,8 +274,8 @@ Examples:
             deployment_name=azure_config['deployment_name'],
             api_version=azure_config.get('api_version'),
             max_retries=azure_config.get('max_retries'),
-            temperature=azure_config.get('temperature', 0.7),
-            max_completion_tokens=azure_config.get('max_completion_tokens', 50000)
+            temperature=azure_config.get('temperature'),
+            max_completion_tokens=azure_config.get('max_completion_tokens')
         )
         logger.info("Azure client initialized")
     except Exception as e:

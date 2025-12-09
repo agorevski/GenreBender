@@ -40,11 +40,11 @@ class VideoAssembler:
         
         # Video settings from config
         self.video_config = config.get('video', {})
-        self.resolution = self.video_config.get('resolution', '1920x1080')
-        self.fps = self.video_config.get('fps', 24)
-        self.codec = self.video_config.get('codec', 'libx264')
-        self.bitrate = self.video_config.get('bitrate', '5000k')
-        self.preset = self.video_config.get('preset', 'medium')
+        self.resolution = self.video_config.get('resolution')
+        self.fps = self.video_config.get('fps')
+        self.codec = self.video_config.get('codec')
+        self.bitrate = self.video_config.get('bitrate')
+        self.preset = self.video_config.get('preset')
         
         # Ensure temp directory exists
         self.temp_dir.mkdir(parents=True, exist_ok=True)

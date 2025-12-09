@@ -56,11 +56,11 @@ def main():
     extractor = KeyframeExtractor(
         output_dir=str(dirs['keyframes']),
         quality=keyframe_config['quality'],
-        use_sequential=keyframe_config.get('use_sequential_read', True),
-        use_parallel=keyframe_config.get('parallel_extraction', False),
-        use_gpu=keyframe_config.get('use_gpu_decode', False),
-        parallel_workers=keyframe_config.get('parallel_workers', 0),
-        gpu_device_id=keyframe_config.get('gpu_device_id', 0)
+        use_sequential=keyframe_config.get('use_sequential_read'),
+        use_parallel=keyframe_config.get('parallel_extraction'),
+        use_gpu=keyframe_config.get('use_gpu_decode'),
+        parallel_workers=keyframe_config.get('parallel_workers'),
+        gpu_device_id=keyframe_config.get('gpu_device_id')
     )
     
     # Extract keyframes (5 frames per shot for temporal analysis)

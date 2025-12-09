@@ -346,7 +346,7 @@ print(f"Actors: {movie.actors}")
 - Use official genre classifications for better music selection
 - Display ratings and cast information in final output
 
-## 🧠 Story Graph Generator
+## 🧠 Story Graph Generator (Stage 11)
 
 GenreBender includes a standalone utility for generating comprehensive semantic story graphs from movies. This AI-powered tool creates structured narrative understanding that can be used for advanced trailer generation and analysis.
 
@@ -490,11 +490,260 @@ outputs/story_graphs/<movie_name>/
 - Movie synopsis (at least 50 characters)
 - Python dependencies: `pysrt`, `openai`, `pyyaml`
 
+## 🎭 Beat Sheet Generator (Stage 12 - Layer 2.2)
+
+The Beat Sheet Generator transforms story graphs into genre-specific trailer beat sheets through a two-stage AI process. This is **Layer 2.2** of the genre transformation pipeline, producing structured beats for automated scene retrieval.
+
+### What is a Beat Sheet?
+
+A beat sheet is a structured sequence of 8-12 "beats" (narrative moments) that define the emotional and visual arc of a trailer. Each beat includes:
+- **Narrative description**: What happens in this moment
+- **Target emotion**: The feeling this beat should evoke
+- **Visual requirements**: Specific visual elements needed
+- **Audio cue**: Sound/music direction
+- **Embedding prompt**: Dense text for semantic scene retrieval (Layer 2.3)
+
+### Two-Stage Process
+
+**Stage 1: Genre Reinterpretation**
+- Reframes the original movie in the target genre
+- Transforms tone, conflict, and emotional arc
+- Preserves core plot and characters
+- Outputs: `genre_rewrite.json`
+
+**Stage 2: Beat Sheet Generation**
+- Creates 8-12 trailer beats from the reinterpretation
+- Each beat has rich embedding prompts for scene matching
+- Follows standard trailer structure (hook → setup → conflict → escalation → climax)
+- Outputs: `beats.json`
+
+### Quick Start
+
+```bash
+# Generate thriller beat sheet from story graph
+python 12_beat_sheet_generator.py \
+  --movie-name "Airplane!" \
+  --target-genre thriller
+
+# Generate horror version (force regeneration)
+python 12_beat_sheet_generator.py \
+  --movie-name "Airplane!" \
+  --target-genre horror \
+  --force
+```
+
+### Usage Examples
+
+```bash
+# Basic usage
+python 12_beat_sheet_generator.py \
+  --movie-name "Movie Title" \
+  --target-genre action
+
+# Custom temperature for more creative beats
+python 12_beat_sheet_generator.py \
+  --movie-name "Movie" \
+  --target-genre scifi \
+  --temperature 0.8
+
+# Validate without generating
+python 12_beat_sheet_generator.py \
+  --movie-name "Movie" \
+  --target-genre drama \
+  --validate-only
+
+# Custom output directory
+python 12_beat_sheet_generator.py \
+  --movie-name "Movie" \
+  --target-genre comedy \
+  --output-dir custom/path/
+```
+
+### Command Line Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--movie-name` | Movie name (must match Stage 11 output) | Required |
+| `--target-genre` | Target genre (thriller/action/drama/horror/scifi/comedy/romance) | Required |
+| `--output-dir` | Custom output directory | `outputs/story_graphs/<movie>/` |
+| `--force` | Force regeneration if beats.json exists | False |
+| `--temperature` | LLM temperature (0.0-1.0) | 0.7 (from settings.yaml) |
+| `--validate-only` | Only validate inputs, don't generate | False |
+
+### Output Structure
+
+```
+outputs/story_graphs/<movie_name>/
+├── story_graph.json          # Stage 11 input
+├── genre_rewrite.json        # Stage 1 output (intermediate)
+├── beats.json                # Stage 2 output (final)
+├── metadata_beats.json       # Generation metadata
+└── beat_sheet_generator.log  # Detailed logs
+```
+
+### Beat Sheet JSON Schema
+
+```json
+{
+  "target_genre": "thriller",
+  "target_duration": 90,
+  "beat_count": 10,
+  "beats": [
+    {
+      "id": "beat_01",
+      "name": "Cold Open",
+      "description": "Establish the ominous atmosphere...",
+      "target_emotion": "suspense",
+      "visual_requirements": [
+        "Dark, shadowy establishing shot",
+        "Isolated urban environment",
+        "Minimal lighting, high contrast",
+        "Camera slowly pushing in",
+        "Character alone or vulnerable"
+      ],
+      "audio_cue": "Low ambient drones, minimal music, heightened environmental sounds",
+      "voiceover": null,
+      "embedding_prompt": "Dark atmospheric establishing shot with ominous tension building. Shadowy figures moving through dimly lit urban environment at night. Sense of foreboding and unease permeates the scene. Mystery thriller mood with high suspense and dramatic lighting. Character isolation and vulnerability in dangerous setting. Slow deliberate camera movement enhancing dread."
+    },
+    {
+      "id": "beat_02",
+      "name": "Introduce Protagonist",
+      "description": "Show main character in seemingly normal world...",
+      "target_emotion": "curious",
+      "visual_requirements": [...],
+      "audio_cue": "...",
+      "voiceover": "...",
+      "embedding_prompt": "..."
+    }
+  ],
+  "_metadata": {
+    "generator": "beat_sheet_generator_v1",
+    "temperature": 0.7,
+    "beat_count_range": "8-12",
+    "actual_beat_count": 10
+  }
+}
+```
+
+### Genre Rewrite Schema
+
+```json
+{
+  "new_genre": "thriller",
+  "logline": "Genre-specific one-sentence pitch",
+  "primary_conflict": "Core tension reframed for thriller",
+  "antagonistic_forces": [
+    "Shadowy conspiracy",
+    "Time running out",
+    "Trust no one"
+  ],
+  "genre_motifs": [
+    "Surveillance and paranoia",
+    "Hidden identities",
+    "Ticking clock",
+    "Moral ambiguity"
+  ],
+  "tone_profile": {
+    "pace": "slow build to frenetic climax",
+    "visual_tone": "desaturated, high contrast, shadows, blue tones",
+    "sound_profile": "sparse ambient, sudden stings, tense strings"
+  },
+  "emotional_arc_transformed": [
+    {
+      "phase": "opening",
+      "emotion": "unease",
+      "description": "Subtle wrongness beneath normal surface"
+    },
+    {
+      "phase": "build",
+      "emotion": "paranoia",
+      "description": "Growing realization of danger"
+    },
+    {
+      "phase": "climax",
+      "emotion": "terror",
+      "description": "Truth revealed, stakes at maximum"
+    },
+    {
+      "phase": "resolution",
+      "emotion": "uncertain",
+      "description": "Threat contained but questions remain"
+    }
+  ]
+}
+```
+
+### Use Cases
+
+1. **Automated Scene Retrieval**: Embedding prompts enable semantic search for matching scenes
+2. **Genre Transformation**: Reinterpret any movie in a different genre
+3. **Trailer Structure**: Follow professional trailer editing conventions
+4. **Creative Exploration**: Generate multiple genre variations
+5. **Layer 2.3 Input**: Beats feed directly into scene retrieval pipeline
+
+### Configuration
+
+Edit `trailer_generator/config/settings.yaml`:
+
+```yaml
+beat_sheet:
+  temperature: 0.7              # LLM creativity (0.0-1.0)
+  min_beats: 8                  # Minimum trailer beats
+  max_beats: 12                 # Maximum trailer beats
+  target_duration: 90           # Target trailer length (seconds)
+  # Future: embedding generation
+  embedding_model: "text-embedding-ada-002"
+  embedding_batch_size: 10
+```
+
+### Technical Details
+
+- **AI Model**: Azure OpenAI GPT-4 with structured JSON output
+- **Temperature**: 0.7 (balanced creativity)
+- **Processing Time**: ~10-20 seconds per beat sheet
+- **Genre Context**: Automatically loads from `genre_profiles.yaml`
+- **Validation**: Ensures 8-12 beats, 3-5 visual requirements per beat
+- **Caching**: Saves intermediate `genre_rewrite.json` for debugging
+
+### Integration with Pipeline
+
+```
+Stage 11: Story Graph → Stage 12: Beat Sheet → Layer 2.3: Scene Retrieval
+                         ↓
+                   genre_rewrite.json
+                   beats.json (with embedding prompts)
+                         ↓
+                   [Future: Semantic scene matching]
+```
+
+### Requirements
+
+- Azure OpenAI API key configured in `settings.yaml`
+- Story graph from Stage 11 (`story_graph.json`)
+- Python dependencies: `openai`, `pyyaml` (already in `requirements.txt`)
+
+### Troubleshooting
+
+**"Story graph not found"**
+- Run Stage 11 first: `python 11_story_graph_generator.py --movie-name "Movie" ...`
+
+**"Unsupported genre"**
+- Use one of: thriller, action, drama, horror, scifi, comedy, romance
+- Check `trailer_generator/config/genre_profiles.yaml`
+
+**Empty or invalid JSON response**
+- Check Azure OpenAI API key and endpoint
+- Verify `max_completion_tokens` in settings.yaml
+- Review logs in `beat_sheet_generator.log`
+
+**Beat count outside valid range**
+- Adjust `min_beats` and `max_beats` in settings.yaml
+- Default: 8-12 beats (standard trailer length)
+
 ## 📚 Additional Documentation
 
 - `STAGES_8_9_IMPLEMENTATION.md` - Detailed implementation guide for stages 8 & 9
 - `audio_assets/README.md` - Music library setup and usage
-- `PIPELINE_STAGES.md` - Complete pipeline architecture documentation
 - `utilities/README.md` - OMDB API utilities documentation
 
 ---

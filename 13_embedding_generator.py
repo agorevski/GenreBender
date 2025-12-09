@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""
+Stage 13: Embedding Generation
+
+Generates vector embeddings for semantic scene retrieval:
+1. Scene embeddings from shot metadata (visual + audio + story context)
+2. Beat embeddings from beat sheet prompts
+
+Outputs:
+- scene_embeddings.pkl
+- beat_embeddings.pkl
+"""
+
+import argparse
+import json
+import logging
+import sys
+from pathlib import Path
+
+from pipeline_common import (
+    initialize_stage,
+    load_config,
+    print_completion_message,
+    sanitize_filename
+)
+from trailer_generator.narrative.azure_client import AzureOpenAIClient
+from trailer_generator.embeddings.embedding_generator import generate_embeddings
+
+logger = logging.getLogger(__name__)
+
+STAGE_NAME = "embedding_generation"
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(description="Stage 13: Generate embeddings for semantic scene retrieval")
+    parser.add_argument('--input', type=str, required=True, help='Input video file path')
+    parser.add_argument('--target-genre', type=str, required=True, choices=['thriller', 'action', 'drama', 'horror', 'scifi', 'comedy', 'romance'], help='Target trailer genre')
+    parser.add_argument('--movie-name', type=str, help='Movie name (for story graph lookup, defaults to input filename)')
+    parser.add_argument('--force', action='store_true', help='Force regeneration even if embeddings exist')
+    parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
+    return parser.parse_args()
+
+
+def validate_inputs(args, output_dir: Path) -> tuple:
+    """
+    Validate required input files exist.
+    
+    Returns:
+        Tuple of (shot_metadata_path, beats_path, story_graph_path)
+    """
+    # Check shot metadata (from stages 1-5)
+    shot_metadata_path = output_dir / 'shots' / 'shot_metadata.json'
+    if not shot_metadata_path.exists():
+        logger.error(f"Shot metadata not found: {shot_metadata_path}")
+        logger.error("Please run stages 1-5 first")
+        sys.exit(1)
+    
+    # Determine movie name
+    movie_name = args.movie_name
+    if not movie_name:
+        # Use sanitized input filename
+        from pipeline_common import sanitize_filename
+        movie_name = sanitize_filename(Path(args.input).stem)
+    
+    # Check beat sheet (from stage 12)
+    story_graph_dir = Path('outputs') / 'story_graphs' / movie_name
+    beats_path = story_graph_dir / 'beats.json'
+    
+    if not beats_path.exists():
+        logger.error(f"Beat sheet not found: {beats_path}")
+        logger.error(f"Please run stage 12 first: python 12_beat_sheet_generator.py --movie-name '{movie_name}' --target-genre {args.target_genre}")
+        sys.exit(1)
+    
+    # Story graph is optional but recommended
+    story_graph_path = story_graph_dir / 'story_graph.json'
+    if not story_graph_path.exists():
+        logger.warning(f"Story graph not found: {story_graph_path}")
+        logger.warning("Embeddings will be generated without story context")
+        story_graph_path = None
+    
+    logger.info(f"Input validation complete:")
+    logger.info(f"  Shot metadata: {shot_metadata_path}")
+    logger.info(f"  Beat sheet: {beats_path}")
+    if story_graph_path:
+        logger.info(f"  Story graph: {story_graph_path}")
+    
+    return shot_metadata_path, beats_path, story_graph_path
+
+
+def main():
+    """Main execution function."""
+    args = parse_args()
+    
+    # Initialize stage with checkpoint
+    output_base, dirs, checkpoint, logger = initialize_stage(
+        STAGE_NAME, 
+        args.input, 
+        args.target_genre
+    )
+    
+    # Check if already completed
+    if not args.force and checkpoint.is_stage_completed(STAGE_NAME):
+        logger.info(f"Stage '{STAGE_NAME}' already completed. Use --force to regenerate.")
+        print_completion_message(STAGE_NAME, checkpoint, output_base)
+        return 0
+    
+    # Validate inputs
+    shot_metadata_path, beats_path, story_graph_path = validate_inputs(args, output_base)
+    
+    # Load configuration
+    config = load_config()
+    
+    # Initialize Azure OpenAI client
+    azure_config = config.get('azure_openai', {})
+    azure_client_instance = AzureOpenAIClient(
+        endpoint=azure_config.get('endpoint'),
+        api_key=azure_config.get('api_key'),
+        deployment_name=azure_config.get('deployment_name'),
+        api_version=azure_config.get('api_version')
+    )
+    
+    # Generate embeddings
+    logger.info("Generating embeddings...")
+    
+    embeddings_dir = output_base / 'embeddings'
+    embeddings_dir.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        scene_emb_path, beat_emb_path = generate_embeddings(
+            output_dir=embeddings_dir,
+            shot_metadata_path=shot_metadata_path,
+            beats_path=beats_path,
+            story_graph_path=story_graph_path,
+            azure_client=azure_client_instance.client,
+            config=config
+        )
+        
+        logger.info("✓ Embedding generation complete")
+        logger.info(f"  Scene embeddings: {scene_emb_path}")
+        logger.info(f"  Beat embeddings: {beat_emb_path}")
+        
+        # Mark stage as complete
+        checkpoint.complete_stage(STAGE_NAME, {
+            'scene_embeddings': str(scene_emb_path),
+            'beat_embeddings': str(beat_emb_path),
+            'target_genre': args.target_genre
+        })
+        
+        # Print completion message
+        print_completion_message(STAGE_NAME, checkpoint, output_base)
+        
+        return 0
+        
+    except Exception as e:
+        logger.error(f"Embedding generation failed: {e}", exc_info=True)
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

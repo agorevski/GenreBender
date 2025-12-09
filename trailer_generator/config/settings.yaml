@@ -15,7 +15,10 @@ processing:
 
 # Shot detection
 shot_detection:
-  threshold: 27.0                              # PySceneDetect content threshold
+  method: "pyscenedetect"                      # Detection method (pyscenedetect only)
+  
+  # PySceneDetect settings
+  threshold: 27.0                              # Content threshold
   min_shot_duration: 0.5                       # seconds
   max_shot_duration: 10.0                      # seconds
   frame_skip: 24                               # Frame skip for faster detection (0=no skip, 1=every other frame, 2=every 3rd, etc.)
@@ -101,12 +104,41 @@ audio:
   ai_music_selection: false                   # Use GPT-4 for music track selection
   fallback_to_original_audio: true            # Use original audio if no music found
 
-# Story graph generation settings
+# Story graph generation settings (Stage 11)
 story_graph:
   temperature: 0.3                            # Lower for more deterministic, higher for more creative
   chunk_duration_minutes: 5                   # Duration of subtitle chunks (minutes)
   overlap_seconds: 30                         # Overlap between chunks (seconds)
   max_parallel_chunks: 7                      # Maximum concurrent chunk processing
+
+# Beat sheet generation settings (Stage 12 - Layer 2.2)
+beat_sheet:
+  temperature: 0.7                            # LLM temperature for creative beat generation
+  min_beats: 8                                # Minimum number of trailer beats
+  max_beats: 12                               # Maximum number of trailer beats
+  target_duration: 90                         # Target trailer duration in seconds
+
+# Embedding generation settings (Stage 13)
+embedding:
+  model: "text-embedding-ada-002"             # OpenAI embedding model
+  batch_size: 10                              # Batch size for embedding generation
+  max_input_tokens: 50000                     # Maximum tokens per input text
+
+# Scene retrieval settings (Stage 14 - Layer 2.3)
+retrieval:
+  top_k: 10                                   # Number of candidate scenes per beat
+  # Multi-factor scoring weights (must sum to ~1.0)
+  scoring_weights:
+    semantic_similarity: 0.50                 # Primary: embedding cosine similarity
+    emotional_alignment: 0.25                 # Secondary: emotion matching
+    visual_match: 0.20                        # Tertiary: visual attribute matching
+    original_genre_penalty: 0.05              # Small penalty for original genre
+
+# Timeline construction settings (Stage 15)
+timeline:
+  target_duration: 90                         # Target trailer duration (seconds)
+  # Pacing rules (optional custom overrides)
+  pacing_rules: null                          # null = use defaults, or provide custom dict
 
 # OMDB API settings
 omdb:
@@ -119,6 +151,29 @@ omdb:
 
 # Genre selection (default)
 genre: "thriller"
+
+# Pipeline stages configuration
+pipeline:
+  # Stages 1-10: Original pipeline (shot detection through audio mixing)
+  # Stages 11-12: Story understanding layer
+  # Stages 13-15: Semantic retrieval pipeline (NEW)
+  stages:
+    - shot_detection
+    - keyframe_extraction
+    - audio_extraction
+    - subtitle_management
+    - remote_analysis
+    - genre_scoring
+    - shot_selection
+    - narrative_generation
+    - video_assembly
+    - audio_mixing
+    # New semantic pipeline stages:
+    - story_graph_generation    # Stage 11 (standalone)
+    - beat_sheet_generation     # Stage 12 (standalone)
+    - embedding_generation      # Stage 13 (NEW)
+    - scene_retrieval           # Stage 14 (NEW)
+    - timeline_construction     # Stage 15 (NEW)
 
 # Logging
 logging:

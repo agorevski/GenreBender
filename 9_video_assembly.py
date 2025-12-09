@@ -128,9 +128,9 @@ def main():
     logger.info(f"  Transitions: {'enabled' if not args.no_transitions else 'disabled'}")
     logger.info(f"  AI titles: {'enabled' if config.get('video', {}).get('ai_title_generation') else 'disabled'}")
     logger.info(f"  AI transitions: {'enabled' if config.get('video', {}).get('ai_transition_selection') else 'disabled'}")
-    logger.info(f"  Resolution: {config.get('video', {}).get('resolution', '1920x1080')}")
-    logger.info(f"  FPS: {config.get('video', {}).get('fps', 24)}")
-    logger.info(f"  Codec: {config.get('video', {}).get('codec', 'libx264')}")
+    logger.info(f"  Resolution: {config.get('video', {}).get('resolution')}")
+    logger.info(f"  FPS: {config.get('video', {}).get('fps')}")
+    logger.info(f"  Codec: {config.get('video', {}).get('codec')}")
     logger.info("=" * 60)
     
     # Assemble video

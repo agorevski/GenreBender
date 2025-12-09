@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""
+Stage 15: Timeline Construction
+
+Builds deterministic shot-level timeline from beat-matched scenes:
+1. Load selected scenes from stage 14
+2. Allocate time budget per beat based on position
+3. Select shots and assign precise timings
+4. Add genre-appropriate transitions
+5. Calculate pacing profile
+
+Outputs:
+- trailer_timeline.json (complete shot-level timeline)
+"""
+
+import argparse
+import logging
+import sys
+from pathlib import Path
+
+from pipeline_common import (
+    setup_logging,
+    load_config,
+    get_output_dir,
+    update_checkpoint,
+    should_skip_stage
+)
+from trailer_generator.narrative.timeline_constructor import construct_timeline
+
+logger = logging.getLogger(__name__)
+
+STAGE_NAME = "timeline_construction"
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Stage 15: Construct deterministic trailer timeline"
+    )
+    parser.add_argument(
+        '--input',
+        type=str,
+        required=True,
+        help='Input video file path'
+    )
+    parser.add_argument(
+        '--genre',
+        type=str,
+        required=True,
+        choices=['thriller', 'action', 'drama', 'horror', 'scifi', 'comedy', 'romance'],
+        help='Target trailer genre'
+    )
+    parser.add_argument(
+        '--target-duration',
+        type=int,
+        default=90,
+        help='Target trailer duration in seconds (default: 90)'
+    )
+    parser.add_argument(
+        '--force',
+        action='store_true',
+        help='Force reconstruction even if timeline exists'
+    )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Enable verbose logging'
+    )
+    
+    return parser.parse_args()
+
+def validate_inputs(output_dir: Path) -> Path:
+    """
+    Validate required input files exist.
+    
+    Returns:
+        Path to selected_scenes.json
+    """
+    # Check selected scenes (from stage 14)
+    selected_scenes_path = output_dir / 'output' / 'selected_scenes.json'
+    
+    if not selected_scenes_path.exists():
+        logger.error(f"Selected scenes not found: {selected_scenes_path}")
+        logger.error("Please run stage 14 first")
+        sys.exit(1)
+    
+    logger.info(f"Input validation complete:")
+    logger.info(f"  Selected scenes: {selected_scenes_path}")
+    
+    return selected_scenes_path
+
+def main():
+    """Main execution function."""
+    args = parse_args()
+    
+    # Setup
+    output_dir = get_output_dir(args.input)
+    log_file = output_dir / 'trailer_generator.log'
+    setup_logging(log_file, verbose=args.verbose)
+    
+    logger.info("="*60)
+    logger.info(f"Stage 15: Timeline Construction")
+    logger.info("="*60)
+    logger.info(f"Input: {args.input}")
+    logger.info(f"Genre: {args.genre}")
+    logger.info(f"Target Duration: {args.target_duration}s")
+    logger.info(f"Output: {output_dir}")
+    
+    # Check if already completed
+    if not args.force and should_skip_stage(output_dir, STAGE_NAME):
+        logger.info(f"Stage '{STAGE_NAME}' already completed. Use --force to reconstruct.")
+        return 0
+    
+    # Validate inputs
+    selected_scenes_path = validate_inputs(output_dir)
+    
+    # Load configuration
+    config = load_config()
+    
+    # Construct timeline
+    logger.info("Constructing timeline...")
+    
+    output_path = output_dir / 'output' / 'trailer_timeline.json'
+    
+    try:
+        timeline = construct_timeline(
+            selected_scenes_path=selected_scenes_path,
+            output_path=output_path,
+            target_duration=args.target_duration,
+            genre=args.genre
+        )
+        
+        # Log summary
+        total_shots = timeline['total_shots']
+        actual_duration = timeline['actual_duration']
+        pacing = timeline['metadata']['pacing_profile']
+        
+        logger.info("✓ Timeline construction complete")
+        logger.info(f"  Total shots: {total_shots}")
+        logger.info(f"  Duration: {actual_duration:.1f}s (target: {args.target_duration}s)")
+        logger.info(f"  Avg shot duration: {pacing['avg_shot_duration']:.2f}s")
+        logger.info(f"  Shots per minute: {pacing['shots_per_minute']:.1f}")
+        logger.info(f"  Output: {output_path}")
+        
+        # Update checkpoint
+        update_checkpoint(output_dir, STAGE_NAME, {
+            'timeline': str(output_path),
+            'genre': args.genre,
+            'target_duration': args.target_duration,
+            'actual_duration': actual_duration,
+            'total_shots': total_shots,
+            'pacing_profile': pacing
+        })
+        
+        return 0
+        
+    except Exception as e:
+        logger.error(f"Timeline construction failed: {e}", exc_info=True)
+        return 1
+
+if __name__ == '__main__':
+    sys.exit(main())

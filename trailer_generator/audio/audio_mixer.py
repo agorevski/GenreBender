@@ -38,20 +38,20 @@ class AudioMixer:
         
         # Audio settings from config
         self.audio_config = config.get('audio', {})
-        self.sample_rate = self.audio_config.get('sample_rate', 48000)
-        self.bitrate = self.audio_config.get('bitrate', '192k')
-        self.output_format = self.audio_config.get('output_format', 'aac')
-        self.ducking_threshold = self.audio_config.get('ducking_threshold', -20)
-        self.ducking_ratio = self.audio_config.get('ducking_ratio', 4)
-        self.normalization_target = self.audio_config.get('normalization_target', -14)
+        self.sample_rate = self.audio_config.get('sample_rate')
+        self.bitrate = self.audio_config.get('bitrate')
+        self.output_format = self.audio_config.get('output_format')
+        self.ducking_threshold = self.audio_config.get('ducking_threshold')
+        self.ducking_ratio = self.audio_config.get('ducking_ratio')
+        self.normalization_target = self.audio_config.get('normalization_target')
         
         # Initialize music selector
-        music_lib_path = self.audio_config.get('music_library_path', 'audio_assets/music/')
+        music_lib_path = self.audio_config.get('music_library_path')
         self.music_selector = MusicSelector(
             azure_client=azure_client,
             genre_profile=genre_profile,
             music_library_path=music_lib_path,
-            enable_ai=self.audio_config.get('ai_music_selection', False)
+            enable_ai=self.audio_config.get('ai_music_selection')
         )
         
         # Ensure temp directory exists

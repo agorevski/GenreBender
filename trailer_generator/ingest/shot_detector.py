@@ -1,6 +1,5 @@
 """
-Shot detection module with streaming support and overlap handling.
-Uses PySceneDetect to identify shot boundaries in video files.
+Shot detection module using PySceneDetect.
 """
 
 import os
@@ -21,8 +20,7 @@ logger = logging.getLogger(__name__)
 
 class ShotDetector:
     """
-    Detects shots in video files using content-based detection.
-    Supports streaming processing for long movies with chunk overlap.
+    Detects shots in video files using PySceneDetect.
     """
     
     def __init__(self, threshold: float = 27.0, chunk_duration: int = 30, 
@@ -33,7 +31,7 @@ class ShotDetector:
         Args:
             threshold: Content detection threshold (default: 27.0)
             chunk_duration: Duration of each processing chunk in seconds
-            overlap: Overlap duration between chunks to catch transitions
+            overlap: Overlap duration between chunks
             output_dir: Directory to save shot segments
         """
         self.threshold = threshold
@@ -45,12 +43,12 @@ class ShotDetector:
     def detect_shots(self, video_path: str, streaming: bool = True, 
                     frame_skip: int = 0) -> List[Dict]:
         """
-        Detect shots in video file.
+        Detect shots in video file using PySceneDetect.
         
         Args:
             video_path: Path to input video file
             streaming: If True, use optimized streaming detection
-            frame_skip: Number of frames to skip (0=no skip, 1=every other, etc.)
+            frame_skip: Number of frames to skip
             
         Returns:
             List of shot dictionaries with metadata
@@ -212,7 +210,7 @@ class ShotDetector:
                 video.seek(current_frame)
                 frame_im = video.read()
                 
-                if frame_im is None or not frame_im.size:
+                if frame_im is False or frame_im is None:
                     break
                 
                 # Check for cut at this frame

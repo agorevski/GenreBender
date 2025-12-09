@@ -18,6 +18,9 @@ openai>=1.0.0
 requests>=2.31.0
 aiohttp>=3.9.0
 
+# Semantic Search & Embeddings (NEW - Stages 13-15)
+faiss-cpu>=1.7.4  # or faiss-gpu for GPU acceleration
+
 # Configuration & Data
 pyyaml>=6.0
 python-dotenv>=1.0.0

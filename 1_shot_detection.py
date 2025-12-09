@@ -36,7 +36,7 @@ def main():
     # Load configuration
     config = load_config(args.config)
     
-    # Initialize detector
+    # Initialize detector with PySceneDetect
     detector = ShotDetector(
         threshold=config['shot_detection']['threshold'],
         chunk_duration=config['processing']['chunk_duration'],
@@ -44,11 +44,11 @@ def main():
         output_dir=str(dirs['shots'])
     )
     
-    # Get frame_skip from config
+    # Get frame_skip from config (PySceneDetect only)
     frame_skip = config['shot_detection'].get('frame_skip', 0)
     
     # Detect shots
-    logger.info("Starting shot detection...")
+    logger.info("Starting shot detection using PySceneDetect...")
     shots = detector.detect_shots(args.input, streaming=True, frame_skip=frame_skip)
     logger.info(f"Detected {len(shots)} shots")
     

@@ -49,6 +49,19 @@ def get_output_base_dir(input_path: str) -> Path:
     sanitized = sanitize_filename(filename)
     return Path('outputs') / sanitized
 
+def get_story_graph_dir(movie_name: str) -> Path:
+    """
+    Get the story graph output directory for a given movie name.
+    
+    Args:
+        movie_name: Movie name (will be sanitized)
+        
+    Returns:
+        Path object for story graph directory: outputs/story_graphs/<sanitized_name>/
+    """
+    sanitized = sanitize_filename(movie_name)
+    return Path('outputs') / 'story_graphs' / sanitized
+
 def setup_logging(log_file: Path, level: str = 'INFO'):
     """
     Setup logging configuration.
