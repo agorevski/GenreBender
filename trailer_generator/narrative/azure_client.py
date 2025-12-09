@@ -15,10 +15,7 @@ class AzureOpenAIClient:
     """
     Client for Azure OpenAI API with retry logic and rate limiting.
     """
-    
-    def __init__(self, endpoint: str, api_key: str, deployment_name: str,
-                 api_version: str = "2025-01-01-preview", max_retries: int = 3,
-                 temperature: float = 0.7, max_completion_tokens: int = 4000):
+    def __init__(self, endpoint: str, api_key: str, deployment_name: str, api_version: str = "2025-01-01-preview", max_retries: int = 3, temperature: float = 0.7, max_completion_tokens: int = 50000):
         """
         Initialize Azure OpenAI client.
         
@@ -50,10 +47,7 @@ class AzureOpenAIClient:
         
         logger.info(f"Initialized Azure OpenAI client with deployment: {deployment_name}")
     
-    def generate_completion(self, messages: List[Dict[str, str]], 
-                          temperature: Optional[float] = None,
-                          max_completion_tokens: Optional[int] = None,
-                          response_format: Optional[Dict] = None) -> str:
+    def generate_completion(self, messages: List[Dict[str, str]], temperature: Optional[float] = None, max_completion_tokens: Optional[int] = None, response_format: Optional[Dict] = None) -> str:
         """
         Generate completion from Azure OpenAI.
         
@@ -142,10 +136,8 @@ class AzureOpenAIClient:
                 else:
                     logger.error(f"Failed after {self.max_retries} attempts")
                     raise
-    
-    def generate_structured_output(self, messages: List[Dict[str, str]],
-                                  temperature: Optional[float] = None,
-                                  max_completion_tokens: Optional[int] = None) -> str:
+
+    def generate_structured_output(self, messages: List[Dict[str, str]], temperature: Optional[float] = None, max_completion_tokens: Optional[int] = None) -> str:
         """
         Generate structured JSON output.
         
@@ -177,8 +169,7 @@ class AzureOpenAIClient:
         # Rough approximation: ~4 chars per token
         return len(text) // 4
     
-    def check_token_limit(self, messages: List[Dict[str, str]], 
-                         max_tokens: int = 50000) -> bool:
+    def check_token_limit(self, messages: List[Dict[str, str]], max_tokens: int = 50000) -> bool:
         """
         Check if messages fit within token limit.
         

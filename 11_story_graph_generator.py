@@ -250,11 +250,20 @@ Examples:
     logger.info("Loading configuration...")
     config = load_config(args.config)
     azure_config = config.get('azure_openai', {})
-    story_graph_azure_config = config.get('story_graph', {})
     if not azure_config:
         logger.error("Azure OpenAI configuration not found")
         print("\n❌ Error: Azure OpenAI configuration missing from settings.yaml")
         sys.exit(1)
+    
+    # Get story graph configuration
+    story_graph_config = config.get('story_graph', {})
+    chunk_duration_minutes = story_graph_config.get('chunk_duration_minutes', 15)
+    overlap_seconds = story_graph_config.get('overlap_seconds', 30)
+    max_parallel_chunks = story_graph_config.get('max_parallel_chunks', 5)
+    story_graph_temperature = story_graph_config.get('temperature', 0.3)
+    
+    # Get synthesis token limit from Azure config
+    synthesis_max_tokens = azure_config.get('max_completion_tokens')
     
     # Initialize Azure client
     logger.info("Initializing Azure OpenAI client...")
@@ -265,8 +274,8 @@ Examples:
             deployment_name=azure_config['deployment_name'],
             api_version=azure_config.get('api_version'),
             max_retries=azure_config.get('max_retries'),
-            temperature=story_graph_azure_config.get('temperature'),
-            max_completion_tokens=azure_config.get('max_completion_tokens')
+            temperature=azure_config.get('temperature', 0.7),
+            max_completion_tokens=azure_config.get('max_completion_tokens', 50000)
         )
         logger.info("Azure client initialized")
     except Exception as e:
@@ -274,20 +283,12 @@ Examples:
         print(f"\n❌ Error initializing Azure OpenAI client: {e}")
         sys.exit(1)
     
-    # Get story graph configuration
-    story_graph_config = config.get('story_graph', {})
-    chunk_duration_minutes = story_graph_config.get('chunk_duration_minutes', 15)
-    overlap_seconds = story_graph_config.get('overlap_seconds', 30)
-    max_parallel_chunks = story_graph_config.get('max_parallel_chunks', 5)
-    
-    # Get synthesis token limit from Azure config
-    synthesis_max_tokens = azure_config.get('max_completion_tokens')
-    
     # Initialize story graph generator with cache directory
     logger.info(f"Initializing story graph generator with hierarchical processing...")
     logger.info(f"  Chunk duration: {chunk_duration_minutes} minutes")
     logger.info(f"  Overlap: {overlap_seconds} seconds")
     logger.info(f"  Max parallel chunks: {max_parallel_chunks}")
+    logger.info(f"  Story graph temperature: {story_graph_temperature}")
     logger.info(f"  Synthesis max tokens: {synthesis_max_tokens}")
     cache_dir = output_dir / 'chunks'
     story_graph_gen = StoryGraphGenerator(
@@ -296,7 +297,8 @@ Examples:
         overlap_seconds=overlap_seconds,
         max_parallel_chunks=max_parallel_chunks,
         cache_dir=cache_dir,
-        synthesis_max_tokens=synthesis_max_tokens
+        synthesis_max_tokens=synthesis_max_tokens,
+        temperature=story_graph_temperature
     )
     
     # Generate story graph

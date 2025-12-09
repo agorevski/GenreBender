@@ -29,7 +29,8 @@ class StoryGraphGenerator:
     def __init__(self, azure_client, chunk_duration_minutes: int = 15, 
                  overlap_seconds: int = 30, max_parallel_chunks: int = 5,
                  cache_dir: Optional[Path] = None,
-                 synthesis_max_tokens: Optional[int] = None):
+                 synthesis_max_tokens: Optional[int] = None,
+                 temperature: float = 0.3):
         """
         Initialize story graph generator.
         
@@ -40,14 +41,16 @@ class StoryGraphGenerator:
             max_parallel_chunks: Maximum number of chunks to process in parallel
             cache_dir: Directory for caching chunk analyses
             synthesis_max_tokens: Max tokens for synthesis stage (None = use client default)
+            temperature: Sampling temperature for story graph generation (default: 0.3)
         """
         self.azure_client = azure_client
         self.chunker = SubtitleChunker(chunk_duration_minutes, overlap_seconds)
         self.max_parallel_chunks = max_parallel_chunks
         self.cache_dir = cache_dir
         self.synthesis_max_tokens = synthesis_max_tokens
+        self.temperature = temperature
         logger.info(f"Initialized StoryGraphGenerator with hierarchical processing "
-                   f"(max {max_parallel_chunks} parallel chunks)")
+                   f"(max {max_parallel_chunks} parallel chunks, temperature={temperature})")
     
     def generate_story_graph(
         self,
@@ -299,8 +302,8 @@ Be concise but thorough."""
         try:
             response = self.azure_client.generate_structured_output(
                 messages=messages,
-                temperature=0.3,
-                max_completion_tokens=1500
+                temperature=self.temperature,
+                max_completion_tokens=self.synthesis_max_tokens
             )
             
             if not response or not response.strip():
@@ -419,7 +422,7 @@ Synthesize all segments into coherent scenes. Merge related segments into scenes
             # Use configured synthesis_max_tokens or None (will use client default)
             response = self.azure_client.generate_structured_output(
                 messages=messages,
-                temperature=0.3,
+                temperature=self.temperature,
                 max_completion_tokens=self.synthesis_max_tokens
             )
             
@@ -497,8 +500,8 @@ Consider narrative pacing and emotional flow."""
         try:
             response = self.azure_client.generate_structured_output(
                 messages=messages,
-                temperature=0.3,
-                max_completion_tokens=2000
+                temperature=self.temperature,
+                max_completion_tokens=self.synthesis_max_tokens
             )
             
             if not response or not response.strip():
