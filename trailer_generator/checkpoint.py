@@ -26,7 +26,13 @@ class CheckpointManager:
         'shot_selection',
         'narrative_generation',
         'video_assembly',
-        'audio_mixing'
+        'audio_mixing',
+        # Semantic pipeline stages (11-15)
+        'story_graph_generation',
+        'beat_sheet_generation',
+        'embedding_generation',
+        'scene_retrieval',
+        'timeline_construction'
     ]
     
     def __init__(self, checkpoint_path: Path):

@@ -14,6 +14,8 @@ import pickle
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,9 @@ class EmbeddingGenerator:
         azure_client,
         embedding_model: str = "text-embedding-ada-002",
         batch_size: int = 10,
-        max_input_tokens: int = 8000
+        max_input_tokens: int = 8000,
+        parallel_requests: bool = False,
+        parallel_workers: int = 10
     ):
         """
         Initialize embedding generator.
@@ -35,11 +39,16 @@ class EmbeddingGenerator:
             embedding_model: Embedding model name
             batch_size: Number of texts to embed per API call
             max_input_tokens: Maximum tokens per input text
+            parallel_requests: Enable parallel API requests
+            parallel_workers: Number of concurrent workers for parallel requests
         """
         self.azure_client = azure_client
         self.embedding_model = embedding_model
         self.batch_size = batch_size
         self.max_input_tokens = max_input_tokens
+        self.parallel_requests = parallel_requests
+        self.parallel_workers = parallel_workers
+        self.progress_lock = threading.Lock()
         
     def generate_scene_embeddings(
         self,
@@ -62,7 +71,11 @@ class EmbeddingGenerator:
         Returns:
             Tuple of (embeddings array, shot_ids list)
         """
-        logger.info(f"Generating embeddings for {len(shot_metadata)} shots...")
+        num_shots = len(shot_metadata['shots'])
+        num_batches = (num_shots + self.batch_size - 1) // self.batch_size
+        
+        logger.info(f"Generating embeddings for {num_shots} shots...")
+        logger.info(f"Expected API requests: {num_batches} (batch_size={self.batch_size})")
         
         # Build scene timeline mapping if story graph available
         scene_context = {}
@@ -72,17 +85,20 @@ class EmbeddingGenerator:
         # Generate text representations for each shot
         texts = []
         shot_ids = []
-        
-        for shot in shot_metadata:
-            shot_id = shot['shot_id']
+        for shot in shot_metadata['shots']:
+            shot_id = shot['id']
             text = self._build_scene_text(shot, scene_context)
             texts.append(text)
             shot_ids.append(shot_id)
         
         # Generate embeddings in batches
-        embeddings = self._generate_embeddings_batch(texts)
+        embeddings = self._generate_embeddings_batch(
+            texts,
+            entity_type="scene",
+            total_count=num_shots
+        )
         
-        logger.info(f"Generated {len(embeddings)} scene embeddings (dim={embeddings.shape[1]})")
+        logger.info(f"✓ Generated {len(embeddings)} scene embeddings (dim={embeddings.shape[1]})")
         return embeddings, shot_ids
     
     def generate_beat_embeddings(
@@ -104,7 +120,11 @@ class EmbeddingGenerator:
         Returns:
             Tuple of (embeddings array, beat_ids list)
         """
-        logger.info(f"Generating embeddings for {len(beats)} beats...")
+        num_beats = len(beats)
+        num_batches = (num_beats + self.batch_size - 1) // self.batch_size
+        
+        logger.info(f"Generating embeddings for {num_beats} beats...")
+        logger.info(f"Expected API requests: {num_batches} (batch_size={self.batch_size})")
         
         texts = []
         beat_ids = []
@@ -122,9 +142,13 @@ class EmbeddingGenerator:
             beat_ids.append(beat_id)
         
         # Generate embeddings in batches
-        embeddings = self._generate_embeddings_batch(texts)
+        embeddings = self._generate_embeddings_batch(
+            texts,
+            entity_type="beat",
+            total_count=num_beats
+        )
         
-        logger.info(f"Generated {len(embeddings)} beat embeddings (dim={embeddings.shape[1]})")
+        logger.info(f"✓ Generated {len(embeddings)} beat embeddings (dim={embeddings.shape[1]})")
         return embeddings, beat_ids
     
     def _build_scene_text(
@@ -286,40 +310,145 @@ class EmbeddingGenerator:
         else:
             return float(parts[0])
     
-    def _generate_embeddings_batch(self, texts: List[str]) -> np.ndarray:
+    def _process_single_batch(
+        self,
+        batch: List[str],
+        batch_num: int,
+        num_batches: int,
+        entity_type: str,
+        total_count: int
+    ) -> Tuple[int, List[List[float]]]:
         """
-        Generate embeddings for texts in batches.
+        Process a single batch of texts (for parallel execution).
+        
+        Returns:
+            Tuple of (batch_num, embeddings)
+        """
+        try:
+            # Call Azure OpenAI embeddings API
+            response = self.azure_client.embeddings.create(
+                model=self.embedding_model,
+                input=batch
+            )
+            
+            # Extract embeddings
+            batch_embeddings = [item.embedding for item in response.data]
+            
+            # Thread-safe progress logging
+            with self.progress_lock:
+                items_processed = min(batch_num * self.batch_size, total_count)
+                percentage = (items_processed / total_count) * 100
+                logger.info(
+                    f"Processing {entity_type} batch {batch_num}/{num_batches} "
+                    f"({percentage:.1f}%) - API request #{batch_num}"
+                )
+            
+            return (batch_num, batch_embeddings)
+            
+        except Exception as e:
+            logger.error(f"Error generating embeddings for batch {batch_num}: {e}")
+            # Fallback: zero vectors
+            embedding_dim = 1536  # Default for ada-002
+            batch_embeddings = [np.zeros(embedding_dim).tolist() for _ in batch]
+            return (batch_num, batch_embeddings)
+    
+    def _generate_embeddings_batch(
+        self,
+        texts: List[str],
+        entity_type: str = "item",
+        total_count: int = None
+    ) -> np.ndarray:
+        """
+        Generate embeddings for texts in batches with progress logging.
+        Supports both serial and parallel execution.
         
         Args:
             texts: List of text strings to embed
+            entity_type: Type of entity being embedded (scene/beat/item)
+            total_count: Total number of items (for progress calculation)
         
         Returns:
             Numpy array of shape (n_texts, embedding_dim)
         """
-        all_embeddings = []
+        total_count = total_count or len(texts)
+        num_batches = (len(texts) + self.batch_size - 1) // self.batch_size
         
+        # Prepare batches
+        batches = []
         for i in range(0, len(texts), self.batch_size):
             batch = texts[i:i + self.batch_size]
+            batch_num = i // self.batch_size + 1
+            batches.append((batch, batch_num))
+        
+        # Execute parallel or serial
+        if self.parallel_requests and len(batches) > 1:
+            return self._generate_embeddings_parallel(
+                batches, num_batches, entity_type, total_count
+            )
+        else:
+            return self._generate_embeddings_serial(
+                batches, num_batches, entity_type, total_count
+            )
+    
+    def _generate_embeddings_serial(
+        self,
+        batches: List[Tuple[List[str], int]],
+        num_batches: int,
+        entity_type: str,
+        total_count: int
+    ) -> np.ndarray:
+        """Serial execution of embedding generation."""
+        all_embeddings = []
+        
+        for batch, batch_num in batches:
+            _, batch_embeddings = self._process_single_batch(
+                batch, batch_num, num_batches, entity_type, total_count
+            )
+            all_embeddings.extend(batch_embeddings)
+        
+        return np.array(all_embeddings, dtype=np.float32)
+    
+    def _generate_embeddings_parallel(
+        self,
+        batches: List[Tuple[List[str], int]],
+        num_batches: int,
+        entity_type: str,
+        total_count: int
+    ) -> np.ndarray:
+        """
+        Parallel execution of embedding generation using ThreadPoolExecutor.
+        
+        Returns:
+            Numpy array of embeddings in correct order
+        """
+        logger.info(f"Using parallel execution with {self.parallel_workers} workers")
+        
+        # Dictionary to store results by batch number (for correct ordering)
+        results = {}
+        
+        with ThreadPoolExecutor(max_workers=self.parallel_workers) as executor:
+            # Submit all batch jobs
+            future_to_batch = {
+                executor.submit(
+                    self._process_single_batch,
+                    batch,
+                    batch_num,
+                    num_batches,
+                    entity_type,
+                    total_count
+                ): batch_num
+                for batch, batch_num in batches
+            }
             
-            try:
-                # Call Azure OpenAI embeddings API
-                response = self.azure_client.embeddings.create(
-                    model=self.embedding_model,
-                    input=batch
-                )
-                
-                # Extract embeddings
-                batch_embeddings = [item.embedding for item in response.data]
-                all_embeddings.extend(batch_embeddings)
-                
-                logger.debug(f"Generated embeddings for batch {i//self.batch_size + 1}")
-                
-            except Exception as e:
-                logger.error(f"Error generating embeddings for batch {i}: {e}")
-                # Fallback: zero vectors
-                embedding_dim = 1536  # Default for ada-002
-                batch_embeddings = [np.zeros(embedding_dim).tolist() for _ in batch]
-                all_embeddings.extend(batch_embeddings)
+            # Collect results as they complete
+            for future in as_completed(future_to_batch):
+                batch_num, batch_embeddings = future.result()
+                results[batch_num] = batch_embeddings
+        
+        # Reconstruct embeddings in correct order
+        all_embeddings = []
+        for batch_num in sorted(results.keys()):
+            all_embeddings.extend(results[batch_num])
         
         return np.array(all_embeddings, dtype=np.float32)
     
@@ -402,12 +531,37 @@ def generate_embeddings(
     
     # Initialize generator
     embedding_config = config.get('embedding', {})
+    batch_size = embedding_config.get('batch_size', 10)
+    parallel_requests = embedding_config.get('parallel_requests', False)
+    parallel_workers = embedding_config.get('parallel_workers', 10)
+    
     generator = EmbeddingGenerator(
         azure_client=azure_client,
         embedding_model=embedding_config.get('model'),
-        batch_size=embedding_config.get('batch_size'),
-        max_input_tokens=embedding_config.get('max_input_tokens')
+        batch_size=batch_size,
+        max_input_tokens=embedding_config.get('max_input_tokens'),
+        parallel_requests=parallel_requests,
+        parallel_workers=parallel_workers
     )
+    
+    # Calculate and log total API requests
+    num_shots = len(shot_metadata['shots'])
+    num_beats = len(beats)
+    scene_batches = (num_shots + batch_size - 1) // batch_size
+    beat_batches = (num_beats + batch_size - 1) // batch_size
+    total_requests = scene_batches + beat_batches
+    
+    logger.info("=" * 60)
+    logger.info("EMBEDDING GENERATION SUMMARY")
+    logger.info(f"Total shots to process: {num_shots}")
+    logger.info(f"Total beats to process: {num_beats}")
+    logger.info(f"Batch size: {batch_size}")
+    logger.info(f"Parallel execution: {'enabled' if parallel_requests else 'disabled'}")
+    if parallel_requests:
+        logger.info(f"Parallel workers: {parallel_workers}")
+    logger.info(f"Total API requests: {total_requests} ({scene_batches} scene + {beat_batches} beat)")
+    logger.info(f"Model: {embedding_config.get('model', 'text-embedding-ada-002')}")
+    logger.info("=" * 60)
     
     # Generate scene embeddings
     scene_embeddings, shot_ids = generator.generate_scene_embeddings(
@@ -442,8 +596,11 @@ def generate_embeddings(
         }
     )
     
-    logger.info(f"Embedding generation complete:")
-    logger.info(f"  Scenes: {len(shot_ids)} embeddings")
-    logger.info(f"  Beats: {len(beat_ids)} embeddings")
+    logger.info("=" * 60)
+    logger.info("EMBEDDING GENERATION COMPLETE")
+    logger.info(f"Scene embeddings: {len(shot_ids)} shots → {scene_embeddings_path.name}")
+    logger.info(f"Beat embeddings: {len(beat_ids)} beats → {beat_embeddings_path.name}")
+    logger.info(f"Total API requests made: {total_requests}")
+    logger.info("=" * 60)
     
     return scene_embeddings_path, beat_embeddings_path

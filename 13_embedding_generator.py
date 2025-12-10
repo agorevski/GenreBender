@@ -141,7 +141,7 @@ def main():
         logger.info(f"  Beat embeddings: {beat_emb_path}")
         
         # Mark stage as complete
-        checkpoint.complete_stage(STAGE_NAME, {
+        checkpoint.mark_stage_completed(STAGE_NAME, {
             'scene_embeddings': str(scene_emb_path),
             'beat_embeddings': str(beat_emb_path),
             'target_genre': args.target_genre

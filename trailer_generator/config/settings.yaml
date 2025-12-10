@@ -127,8 +127,10 @@ beat_sheet:
 # Embedding generation settings (Stage 13)
 embedding:
   model: "text-embedding-ada-002"             # OpenAI embedding model
-  batch_size: 10                              # Batch size for embedding generation
+  batch_size: 20                              # Batch size for embedding generation
   max_input_tokens: 50000                     # Maximum tokens per input text
+  parallel_requests: true                     # Enable parallel API requests
+  parallel_workers: 20                        # Number of concurrent API requests
 
 # Scene retrieval settings (Stage 14 - Layer 2.3)
 retrieval:
