@@ -20,11 +20,10 @@ from pathlib import Path
 from pipeline_common import (
     setup_logging,
     load_config,
-    get_output_dir,
-    update_checkpoint,
-    should_skip_stage,
+    get_output_base_dir,
     sanitize_filename
 )
+from trailer_generator.checkpoint import CheckpointManager
 from trailer_generator.retrieval.scene_retriever import retrieve_scenes
 
 logger = logging.getLogger(__name__)
@@ -123,9 +122,12 @@ def main():
     args = parse_args()
     
     # Setup
-    output_dir = get_output_dir(args.input)
+    output_dir = get_output_base_dir(args.input)
     log_file = output_dir / 'trailer_generator.log'
-    setup_logging(log_file, verbose=args.verbose)
+    
+    # Setup logging with proper level
+    log_level = 'DEBUG' if args.verbose else 'INFO'
+    setup_logging(log_file, level=log_level)
     
     logger.info("="*60)
     logger.info(f"Stage 14: Scene Retrieval (Layer 2.3)")
@@ -136,7 +138,8 @@ def main():
     logger.info(f"Output: {output_dir}")
     
     # Check if already completed
-    if not args.force and should_skip_stage(output_dir, STAGE_NAME):
+    checkpoint = CheckpointManager(output_dir / 'checkpoint.json')
+    if not args.force and checkpoint.is_stage_completed(STAGE_NAME):
         logger.info(f"Stage '{STAGE_NAME}' already completed. Use --force to re-retrieve.")
         return 0
     
@@ -184,7 +187,7 @@ def main():
         logger.info(f"  Output: {output_path}")
         
         # Update checkpoint
-        update_checkpoint(output_dir, STAGE_NAME, {
+        checkpoint.mark_stage_completed(STAGE_NAME, {
             'selected_scenes': str(output_path),
             'target_genre': args.target_genre,
             'top_k': args.top_k,
