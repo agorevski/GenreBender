@@ -87,7 +87,7 @@ def main():
     if checkpoint.is_stage_completed('remote_analysis') and not args.force:
         logger.warning("⚠️  Remote analysis already completed. Use --force to re-run.")
         print("\n⚠️  This stage is already completed.")
-        print("Use --force flag to re-run, or proceed to next stage: 5_genre_scoring.py")
+        print("Use --force flag to re-run, or proceed to next stage: 6_genre_scoring.py")
         sys.exit(0)
     
     # Load configuration

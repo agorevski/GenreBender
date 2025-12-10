@@ -51,7 +51,7 @@ remote_analysis:
   # Request settings
   timeout: 60
   max_retries: 3
-  batch_size: 4
+  batch_size: 16
   cache_enabled: true
   cache_path: "cache/"
   min_shot_duration: 2.0                       # Minimum shot duration (seconds) for analysis

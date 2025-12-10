@@ -12,6 +12,7 @@ import tempfile
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
+from multiprocessing import shared_memory
 
 logger = logging.getLogger(__name__)
 
@@ -52,15 +53,17 @@ def _empty_features_static(n_mfcc: int = 13) -> Dict:
     }
 
 
-def _extract_shot_features_worker(audio_data: np.ndarray, sr: int,
-                                   start_time: float, end_time: float,
+def _extract_shot_features_worker(shm_name: str, audio_shape: tuple, audio_dtype: str,
+                                   sr: int, start_time: float, end_time: float,
                                    n_mfcc: int = 13) -> Dict:
     """
-    Worker function for parallel audio feature extraction.
+    Worker function for parallel audio feature extraction using shared memory.
     This must be a module-level function to be picklable for multiprocessing.
     
     Args:
-        audio_data: Full audio array
+        shm_name: Name of shared memory block containing audio data
+        audio_shape: Shape of the audio array
+        audio_dtype: Data type of the audio array
         sr: Sample rate
         start_time: Shot start time in seconds
         end_time: Shot end time in seconds
@@ -70,10 +73,17 @@ def _extract_shot_features_worker(audio_data: np.ndarray, sr: int,
         Dictionary of audio features
     """
     try:
+        # Attach to shared memory
+        shm = shared_memory.SharedMemory(name=shm_name)
+        audio_data = np.ndarray(audio_shape, dtype=audio_dtype, buffer=shm.buf)
+        
         # Extract audio segment for this shot
         start_sample = int(start_time * sr)
         end_sample = int(end_time * sr)
-        segment = audio_data[start_sample:end_sample]
+        segment = audio_data[start_sample:end_sample].copy()  # Copy to avoid holding shm reference
+        
+        # Close shared memory in worker (don't unlink, main process will do that)
+        shm.close()
         
         # Handle empty or very short segments
         if len(segment) < sr * 0.1:  # Less than 0.1 seconds
@@ -124,7 +134,7 @@ def _extract_shot_features_worker(audio_data: np.ndarray, sr: int,
         return features
         
     except Exception as e:
-        logger.warning(f"Failed to extract features for shot: {e}")
+        # Don't log in worker, return error info instead
         return _empty_features_static(n_mfcc)
 
 
@@ -181,39 +191,58 @@ class AudioExtractor:
                 shot['audio_features'] = None
             return shots
         
-        # Process shots in parallel
-        logger.info(f"Step 2/2: Processing {len(shots)} shots in parallel with {self.max_workers} workers...")
+        # Create shared memory for audio data
+        logger.info(f"Step 2/3: Creating shared memory ({audio_data.nbytes / 1024 / 1024:.1f} MB)...")
+        shm = shared_memory.SharedMemory(create=True, size=audio_data.nbytes)
+        shared_audio = np.ndarray(audio_data.shape, dtype=audio_data.dtype, buffer=shm.buf)
+        shared_audio[:] = audio_data[:]  # Copy data to shared memory
+        logger.info(f"Shared memory created: {shm.name}")
+        
+        # Process shots in parallel using shared memory
+        logger.info(f"Step 3/3: Processing {len(shots)} shots in parallel with {self.max_workers} workers...")
         results = {}
         total_shots = len(shots)
         completed = 0
         
-        with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
-            # Submit all shots for processing
-            future_to_idx = {
-                executor.submit(
-                    _extract_shot_features_worker,
-                    audio_data,
-                    sr,
-                    shot['start_time'],
-                    shot['end_time'],
-                    self.n_mfcc
-                ): idx
-                for idx, shot in enumerate(shots)
-            }
-            
-            # Collect results as they complete
-            for future in as_completed(future_to_idx):
-                idx = future_to_idx[future]
-                completed += 1
+        try:
+            with ProcessPoolExecutor(max_workers=self.max_workers) as executor:
+                # Submit all shots for processing - now only passing shm name (lightweight)
+                future_to_idx = {
+                    executor.submit(
+                        _extract_shot_features_worker,
+                        shm.name,  # Just the name string, not the array!
+                        audio_data.shape,
+                        str(audio_data.dtype),
+                        sr,
+                        shot['start_time'],
+                        shot['end_time'],
+                        self.n_mfcc
+                    ): idx
+                    for idx, shot in enumerate(shots)
+                }
                 
-                try:
-                    features = future.result()
-                    results[idx] = features
-                    logger.info(f"✓ Shot {idx + 1}/{total_shots} complete (duration: {features.get('duration', 0):.2f}s)")
+                # Collect results as they complete
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    completed += 1
+                    
+                    try:
+                        features = future.result()
+                        results[idx] = features
                         
-                except Exception as e:
-                    logger.warning(f"✗ Shot {idx + 1}/{total_shots} failed: {e}")
-                    results[idx] = _empty_features_static(self.n_mfcc)
+                        # Log every 50 shots to reduce log spam
+                        if completed % 50 == 0 or completed == total_shots:
+                            logger.info(f"✓ Progress: {completed}/{total_shots} shots completed")
+                            
+                    except Exception as e:
+                        logger.warning(f"✗ Shot {idx + 1}/{total_shots} failed: {e}")
+                        results[idx] = _empty_features_static(self.n_mfcc)
+        
+        finally:
+            # Clean up shared memory
+            logger.info("Cleaning up shared memory...")
+            shm.close()
+            shm.unlink()
         
         # Apply results to shots in original order
         for idx, shot in enumerate(shots):

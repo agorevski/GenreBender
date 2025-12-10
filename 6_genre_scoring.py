@@ -39,7 +39,7 @@ def main():
     if checkpoint.is_stage_completed('genre_scoring') and not args.force:
         logger.warning("⚠️  Genre scoring already completed. Use --force to re-run.")
         print("\n⚠️  This stage is already completed.")
-        print("Use --force flag to re-run, or proceed to next stage: 6_shot_selection.py")
+        print("Use --force flag to re-run, or proceed to next stage: 7_shot_selection.py")
         sys.exit(0)
     
     # Load configuration

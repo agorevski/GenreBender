@@ -2,7 +2,7 @@
 
 model:
   # Model selection - switch between sizes as needed
-  name: "Qwen/Qwen2-VL-7B-Instruct"  # Options: Qwen2-VL-2B-Instruct, Qwen2-VL-7B-Instruct
+  name: "Qwen/Qwen2-VL-2B-Instruct"  # Options: Qwen2-VL-2B-Instruct, Qwen2-VL-7B-Instruct
   device: "cuda"                      # Options: cuda, cpu
   dtype: "float16"                    # Options: float16, float32
   cache_dir: "~/.cache/huggingface"

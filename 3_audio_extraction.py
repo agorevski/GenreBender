@@ -41,7 +41,7 @@ def main():
     if checkpoint.is_stage_completed('audio_extraction') and not args.force:
         logger.warning("⚠️  Audio extraction already completed. Use --force to re-run.")
         print("\n⚠️  This stage is already completed.")
-        print("Use --force flag to re-run, or proceed to next stage: 4_remote_analysis.py")
+        print("Use --force flag to re-run, or proceed to next stage: 4_subtitle_management.py")
         sys.exit(0)
     
     # Load configuration

@@ -41,7 +41,7 @@ def main():
     if checkpoint.is_stage_completed('shot_selection') and not args.force:
         logger.warning("⚠️  Shot selection already completed. Use --force to re-run.")
         print("\n⚠️  This stage is already completed.")
-        print("Use --force flag to re-run, or proceed to next stage: 7_narrative_generation.py")
+        print("Use --force flag to re-run, or proceed to next stage: 8_narrative_generation.py")
         sys.exit(0)
     
     # Load configuration

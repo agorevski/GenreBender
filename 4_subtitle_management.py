@@ -43,7 +43,7 @@ def main():
     if checkpoint.is_stage_completed('subtitle_management') and not args.force:
         logger.warning("⚠️  Subtitle management already completed. Use --force to re-run.")
         print("\n⚠️  This stage is already completed.")
-        print("Use --force flag to re-run, or proceed to next stage: 4_remote_analysis.py")
+        print("Use --force flag to re-run, or proceed to next stage: 5_remote_analysis.py")
         sys.exit(0)
     
     # Load configuration
