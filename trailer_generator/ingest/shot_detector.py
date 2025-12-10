@@ -7,8 +7,10 @@ import json
 import threading
 import queue
 import subprocess
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Dict, Optional, Callable
+from typing import List, Dict, Optional, Callable, Tuple
 from scenedetect import open_video, SceneDetector, detect
 from scenedetect.detectors import ContentDetector
 from scenedetect.scene_manager import SceneManager, save_images
@@ -24,15 +26,20 @@ class ShotDetector:
     """
     
     def __init__(self, threshold: float = 27.0, chunk_duration: int = 30, 
-                 overlap: int = 5, output_dir: str = "shots"):
+                 overlap: int = 5, output_dir: str = "shots",
+                 parallel_workers: int = 0, chunk_overlap: float = 5.0,
+                 min_chunk_duration: float = 30.0):
         """
         Initialize shot detector.
         
         Args:
             threshold: Content detection threshold (default: 27.0)
-            chunk_duration: Duration of each processing chunk in seconds
-            overlap: Overlap duration between chunks
+            chunk_duration: Duration of each processing chunk in seconds (legacy)
+            overlap: Overlap duration between chunks (legacy)
             output_dir: Directory to save shot segments
+            parallel_workers: Number of parallel workers (0 = auto-detect CPUs)
+            chunk_overlap: Overlap in seconds for parallel chunk processing
+            min_chunk_duration: Minimum duration per chunk in seconds (default: 30.0)
         """
         self.threshold = threshold
         self.chunk_duration = chunk_duration
@@ -40,20 +47,30 @@ class ShotDetector:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
+        # Parallel processing settings
+        self.max_parallel_workers = parallel_workers if parallel_workers > 0 else multiprocessing.cpu_count()
+        self.chunk_overlap = chunk_overlap
+        self.min_chunk_duration = min_chunk_duration
+        
+        logger.info(f"Initialized ShotDetector with max {self.max_parallel_workers} workers, min chunk duration {min_chunk_duration}s")
+        
     def detect_shots(self, video_path: str, streaming: bool = True, 
-                    frame_skip: int = 0) -> List[Dict]:
+                    frame_skip: int = 0, parallel: bool = True) -> List[Dict]:
         """
         Detect shots in video file using PySceneDetect.
         
         Args:
             video_path: Path to input video file
-            streaming: If True, use optimized streaming detection
+            streaming: If True, use optimized streaming detection (ignored if parallel=True)
             frame_skip: Number of frames to skip
+            parallel: If True, use parallel chunk-based processing
             
         Returns:
             List of shot dictionaries with metadata
         """
-        if streaming:
+        if parallel and self.max_parallel_workers > 1:
+            return self._detect_shots_parallel(video_path, frame_skip=frame_skip)
+        elif streaming:
             return self._detect_shots_streaming(video_path, frame_skip=frame_skip)
         else:
             return self._detect_shots_full(video_path)
@@ -285,6 +302,25 @@ class ShotDetector:
                     extraction_queue.put(shot.copy())
                     logger.info(f"Final shot {shot_id}: {start_time:.2f}s - {end_time:.2f}s queued")
             
+            # If no shots detected at all, treat entire video as one shot
+            if len(detected_shots) == 0:
+                logger.warning("No scene changes detected in streaming mode - treating entire video as single shot")
+                shot = {
+                    'id': 1,
+                    'start_time': 0.0,
+                    'end_time': total_duration,
+                    'start_frame': 0,
+                    'end_frame': total_frames,
+                    'duration': total_duration,
+                    'file': None,
+                    'keyframe': None
+                }
+                detected_shots.append(shot)
+                
+                if extraction_queue is not None:
+                    extraction_queue.put(shot.copy())
+                    logger.info(f"Single shot: 0.00s - {total_duration:.2f}s queued")
+            
             logger.info(f"Detected {len(detected_shots)} total shots")
             
             # Wait for extraction worker to complete
@@ -325,6 +361,208 @@ class ShotDetector:
             if async_extraction and stop_event:
                 stop_event.set()
             raise e
+    
+    @staticmethod
+    def _detect_chunk_worker(args: Tuple) -> Tuple[int, List[Dict]]:
+        """
+        Worker function for parallel chunk detection (must be static for multiprocessing).
+        
+        Args:
+            args: Tuple of (chunk_id, video_path, start_time, end_time, threshold)
+            
+        Returns:
+            Tuple of (chunk_id, list of detected shots)
+        """
+        chunk_id, video_path, start_time, end_time, threshold = args
+        
+        try:
+            # Create detector for this worker
+            detector = ContentDetector(threshold=threshold)
+            
+            # Detect scenes in chunk
+            scene_list = detect(video_path, detector, start_time=start_time, end_time=end_time)
+            
+            # Convert to shot dictionaries
+            shots = []
+            for start_frame, end_frame in scene_list:
+                shot = {
+                    'start_time': start_frame.get_seconds(),
+                    'end_time': end_frame.get_seconds(),
+                    'start_frame': start_frame.get_frames(),
+                    'end_frame': end_frame.get_frames(),
+                    'duration': (end_frame - start_frame).get_seconds(),
+                    'chunk_id': chunk_id
+                }
+                shots.append(shot)
+            
+            return (chunk_id, shots)
+            
+        except Exception as e:
+            logger.error(f"Error in chunk {chunk_id}: {e}")
+            return (chunk_id, [])
+    
+    @staticmethod
+    def _extract_shot_worker(args: Tuple) -> Tuple[int, Optional[str]]:
+        """
+        Worker function for parallel shot extraction (must be static for multiprocessing).
+        
+        Args:
+            args: Tuple of (shot_temp_id, video_path, start_time, duration, output_dir)
+            
+        Returns:
+            Tuple of (shot_temp_id, extracted_file_path or None)
+        """
+        shot_temp_id, video_path, start_time, duration, output_dir = args
+        
+        try:
+            shot_filename = f"shot_temp_{shot_temp_id:04d}.mp4"
+            shot_path = Path(output_dir) / shot_filename
+            
+            # FFmpeg command to extract segment
+            cmd = [
+                'ffmpeg',
+                '-ss', str(start_time),
+                '-i', video_path,
+                '-t', str(duration),
+                '-c', 'copy',
+                '-y',
+                str(shot_path)
+            ]
+            
+            subprocess.run(cmd, check=True, capture_output=True)
+            return (shot_temp_id, str(shot_path))
+            
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to extract shot {shot_temp_id}: {e}")
+            return (shot_temp_id, None)
+        except Exception as e:
+            logger.error(f"Unexpected error extracting shot {shot_temp_id}: {e}")
+            return (shot_temp_id, None)
+    
+    def _detect_shots_parallel(self, video_path: str, frame_skip: int = 0) -> List[Dict]:
+        """
+        Detect shots using parallel chunk-based processing across multiple CPUs.
+        Uses adaptive parallelization based on video duration.
+        
+        Args:
+            video_path: Path to video file
+            frame_skip: Frames to skip (currently not used in parallel mode)
+            
+        Returns:
+            List of deduplicated shot dictionaries with extracted files
+        """
+        # Get video metadata
+        video = open_video(video_path)
+        total_duration = video.duration.get_seconds()
+        frame_rate = video.frame_rate
+        total_frames = int(total_duration * frame_rate)
+        video = None  # Close video
+        
+        logger.info(f"Video duration: {total_duration:.2f}s ({total_frames} frames @ {frame_rate} fps)")
+        
+        # Adaptive parallelization: calculate effective workers based on video duration
+        # Ensure each chunk has at least min_chunk_duration seconds
+        max_possible_chunks = int(total_duration / self.min_chunk_duration)
+        effective_workers = min(self.max_parallel_workers, max(1, max_possible_chunks))
+        
+        # Fall back to streaming mode for very short videos
+        if effective_workers == 1 or total_duration < self.min_chunk_duration * 2:
+            logger.info(f"Video too short ({total_duration:.2f}s) for parallelization - using streaming mode")
+            return self._detect_shots_streaming(video_path, async_extraction=True, frame_skip=frame_skip)
+        
+        logger.info(f"Using {effective_workers} workers (max={self.max_parallel_workers}, video={total_duration:.2f}s, min_chunk={self.min_chunk_duration}s)")
+        
+        # Calculate chunk boundaries with overlap
+        chunk_duration = total_duration / effective_workers
+        chunks = []
+        
+        for i in range(effective_workers):
+            start = max(0, i * chunk_duration - self.chunk_overlap)
+            end = min(total_duration, (i + 1) * chunk_duration + self.chunk_overlap)
+            
+            # Skip empty chunks
+            if end - start > 0.1:
+                chunks.append((i, video_path, start, end, self.threshold))
+        
+        logger.info(f"Split video into {len(chunks)} chunks (~{chunk_duration:.1f}s each) for parallel processing")
+        
+        # Process chunks in parallel
+        all_shots = []
+        with ProcessPoolExecutor(max_workers=effective_workers) as executor:
+            future_to_chunk = {executor.submit(ShotDetector._detect_chunk_worker, chunk): chunk[0] 
+                              for chunk in chunks}
+            
+            for future in as_completed(future_to_chunk):
+                chunk_id = future_to_chunk[future]
+                try:
+                    chunk_id_result, shots = future.result()
+                    all_shots.extend(shots)
+                    logger.info(f"Chunk {chunk_id} completed: {len(shots)} shots detected")
+                except Exception as e:
+                    logger.error(f"Chunk {chunk_id} failed: {e}")
+        
+        logger.info(f"Parallel detection complete: {len(all_shots)} total shots (before deduplication)")
+        
+        # Handle case where no scene changes were detected (single continuous shot)
+        if len(all_shots) == 0:
+            logger.warning("No scene changes detected - treating entire video as single shot")
+            all_shots = [{
+                'start_time': 0.0,
+                'end_time': total_duration,
+                'start_frame': 0,
+                'end_frame': total_frames,
+                'duration': total_duration,
+                'chunk_id': -1
+            }]
+        
+        # Deduplicate shots from overlapping chunks
+        deduplicated_shots = self._deduplicate_shots(all_shots)
+        logger.info(f"After deduplication: {len(deduplicated_shots)} unique shots")
+        
+        # Assign temp IDs for extraction
+        for i, shot in enumerate(deduplicated_shots):
+            shot['temp_id'] = i
+        
+        # Extract shots in parallel
+        extraction_tasks = [
+            (shot['temp_id'], video_path, shot['start_time'], shot['duration'], str(self.output_dir))
+            for shot in deduplicated_shots
+        ]
+        
+        logger.info(f"Extracting {len(extraction_tasks)} shots in parallel...")
+        extracted_files = {}
+        
+        with ProcessPoolExecutor(max_workers=effective_workers) as executor:
+            future_to_shot = {executor.submit(ShotDetector._extract_shot_worker, task): task[0] 
+                             for task in extraction_tasks}
+            
+            completed = 0
+            for future in as_completed(future_to_shot):
+                shot_temp_id = future_to_shot[future]
+                try:
+                    temp_id, file_path = future.result()
+                    extracted_files[temp_id] = file_path
+                    completed += 1
+                    
+                    if completed % 10 == 0:
+                        logger.info(f"Extracted {completed}/{len(extraction_tasks)} shots")
+                        
+                except Exception as e:
+                    logger.error(f"Shot {shot_temp_id} extraction failed: {e}")
+                    extracted_files[shot_temp_id] = None
+        
+        logger.info(f"Parallel extraction complete: {len([f for f in extracted_files.values() if f])} successful")
+        
+        # Map extracted files to final shot IDs and rename
+        self._map_extracted_files(deduplicated_shots, deduplicated_shots, extracted_files)
+        
+        # Clean up unmapped temp files
+        self._cleanup_temp_files(extracted_files, deduplicated_shots)
+        
+        # Save metadata
+        self._save_shot_metadata(deduplicated_shots, video_path)
+        
+        return deduplicated_shots
     
     def _detect_chunk(self, video_path: str, start_time: float, 
                      end_time: float, extraction_queue: Optional[queue.Queue] = None,
@@ -413,7 +651,7 @@ class ShotDetector:
         """
         Remove duplicate shots detected in overlapping chunks.
         
-        Strategy: Merge shots that are within 1 second of each other.
+        Strategy: Merge shots that are very close in time (within 0.1 second).
         
         Args:
             shots: List of all detected shots (may contain duplicates)
@@ -432,12 +670,16 @@ class ShotDetector:
         for shot in sorted_shots[1:]:
             last_shot = deduplicated[-1]
             
-            # Check if this shot overlaps with the last one (within 1 second)
-            if abs(shot['start_time'] - last_shot['start_time']) < 1.0:
-                # Merge: use the shot with longer duration or later end time
-                if shot['end_time'] > last_shot['end_time']:
+            # Check if this shot is a duplicate (start time within 0.1 second)
+            # This catches shots detected in overlapping chunks
+            time_diff = abs(shot['start_time'] - last_shot['start_time'])
+            
+            if time_diff < 0.1:
+                # Duplicate - keep the one with longer duration
+                if shot['duration'] > last_shot['duration']:
                     deduplicated[-1] = shot
             else:
+                # Different shot - add it
                 deduplicated.append(shot)
         
         # Assign sequential IDs

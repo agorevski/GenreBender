@@ -36,20 +36,28 @@ def main():
     # Load configuration
     config = load_config(args.config)
     
-    # Initialize detector with PySceneDetect
+    # Initialize detector with PySceneDetect (with parallel processing support)
     detector = ShotDetector(
         threshold=config['shot_detection']['threshold'],
         chunk_duration=config['processing']['chunk_duration'],
         overlap=config['processing']['overlap'],
-        output_dir=str(dirs['shots'])
+        output_dir=str(dirs['shots']),
+        parallel_workers=config['shot_detection'].get('parallel_workers', 0),
+        chunk_overlap=config['shot_detection'].get('chunk_overlap', 5.0)
     )
     
-    # Get frame_skip from config (PySceneDetect only)
+    # Get detection parameters from config
     frame_skip = config['shot_detection'].get('frame_skip', 0)
+    parallel_detection = config['shot_detection'].get('parallel_detection', True)
     
-    # Detect shots
-    logger.info("Starting shot detection using PySceneDetect...")
-    shots = detector.detect_shots(args.input, streaming=True, frame_skip=frame_skip)
+    # Detect shots (parallel mode enabled by default if workers > 1)
+    logger.info(f"Starting shot detection using PySceneDetect (parallel={parallel_detection})...")
+    shots = detector.detect_shots(
+        args.input, 
+        streaming=True, 
+        frame_skip=frame_skip,
+        parallel=parallel_detection
+    )
     logger.info(f"Detected {len(shots)} shots")
     
     # Verify extraction completed
