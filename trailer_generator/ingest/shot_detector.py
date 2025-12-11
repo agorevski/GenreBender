@@ -780,6 +780,11 @@ class ShotDetector:
             shots: List of shot dictionaries
             video_path: Original video path (for reference)
         """
+        # Ensure shot_path field is populated from file field
+        for shot in shots:
+            if 'shot_path' not in shot or not shot['shot_path']:
+                shot['shot_path'] = shot.get('file', '')
+        
         metadata = {
             'source_video': video_path,
             'total_shots': len(shots),

@@ -116,7 +116,7 @@ python 11_story_graph_generator.py --movie-name "$MOVIE_NAME" --synopsis "$SYNOP
 
 echo ""
 echo -e "${GREEN}[2/2] Stage 12: Beat Sheet Generation${NC}"
-python 12_beat_sheet_generator.py --movie-name "$MOVIE_NAME" --target-genre "$GENRE" || exit 1
+python 12_beat_sheet_generator.py --movie-name "$MOVIE_NAME" --genre "$GENRE" || exit 1
 
 # Phase 3: Semantic Retrieval
 echo ""
@@ -126,14 +126,14 @@ echo -e "${BLUE}═════════════════════�
 echo ""
 
 echo -e "${GREEN}[1/3] Stage 13: Embedding Generation${NC}"
-python 13_embedding_generator.py --input "$VIDEO" --target-genre "$GENRE" --movie-name "$MOVIE_NAME" || exit 1
+python 13_embedding_generator.py --input "$VIDEO" --genre "$GENRE" --movie-name "$MOVIE_NAME" || exit 1
 
 echo ""
 echo -e "${GREEN}[2/3] Stage 14: Scene Retrieval (FAISS)${NC}"
-python 14_scene_retrieval.py --input "$VIDEO" --target-genre "$GENRE" --movie-name "$MOVIE_NAME" || exit 1
+python 14_scene_retrieval.py --input "$VIDEO" --genre "$GENRE" --movie-name "$MOVIE_NAME" || exit 1
 echo ""
 echo -e "${GREEN}[3/3] Stage 15: Timeline Construction${NC}"
-python 15_timeline_constructor.py --input "$VIDEO" --target-genre "$GENRE" || exit 1
+python 15_timeline_constructor.py --input "$VIDEO" --genre "$GENRE" || exit 1
 
 # Phase 4: Final Assembly
 echo ""

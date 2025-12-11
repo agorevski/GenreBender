@@ -35,7 +35,7 @@ def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Stage 13: Generate embeddings for semantic scene retrieval")
     parser.add_argument('--input', type=str, required=True, help='Input video file path')
-    parser.add_argument('--target-genre', type=str, required=True, choices=['thriller', 'action', 'drama', 'horror', 'scifi', 'comedy', 'romance'], help='Target trailer genre')
+    parser.add_argument('--genre', type=str, required=True, choices=['thriller', 'action', 'drama', 'horror', 'scifi', 'comedy', 'romance'], help='Target trailer genre')
     parser.add_argument('--movie-name', type=str, help='Movie name (for story graph lookup, defaults to input filename)')
     parser.add_argument('--force', action='store_true', help='Force regeneration even if embeddings exist')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
@@ -69,7 +69,7 @@ def validate_inputs(args, output_dir: Path) -> tuple:
     
     if not beats_path.exists():
         logger.error(f"Beat sheet not found: {beats_path}")
-        logger.error(f"Please run stage 12 first: python 12_beat_sheet_generator.py --movie-name '{movie_name}' --target-genre {args.target_genre}")
+        logger.error(f"Please run stage 12 first: python 12_beat_sheet_generator.py --movie-name '{movie_name}' --genre {args.genre}")
         sys.exit(1)
     
     # Story graph is optional but recommended
@@ -96,7 +96,7 @@ def main():
     output_base, dirs, checkpoint, logger = initialize_stage(
         STAGE_NAME, 
         args.input, 
-        args.target_genre
+        args.genre
     )
     
     # Check if already completed
@@ -144,7 +144,7 @@ def main():
         checkpoint.mark_stage_completed(STAGE_NAME, {
             'scene_embeddings': str(scene_emb_path),
             'beat_embeddings': str(beat_emb_path),
-            'target_genre': args.target_genre
+            'target_genre': args.genre
         })
         
         # Print completion message

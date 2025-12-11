@@ -42,7 +42,7 @@ def parse_args():
         help='Input video file path'
     )
     parser.add_argument(
-        '--target-genre',
+        '--genre',
         type=str,
         required=True,
         choices=['thriller', 'action', 'drama', 'horror', 'scifi', 'comedy', 'romance'],
@@ -133,7 +133,7 @@ def main():
     logger.info(f"Stage 14: Scene Retrieval (Layer 2.3)")
     logger.info("="*60)
     logger.info(f"Input: {args.input}")
-    logger.info(f"Target Genre: {args.target_genre}")
+    logger.info(f"Target Genre: {args.genre}")
     logger.info(f"Top-K: {args.top_k}")
     logger.info(f"Output: {output_dir}")
     
@@ -170,7 +170,7 @@ def main():
             beats_path=beats_path,
             shot_metadata_path=shot_metadata_path,
             output_path=output_path,
-            target_genre=args.target_genre,
+            target_genre=args.genre,
             top_k=args.top_k,
             scoring_weights=scoring_weights
         )
@@ -189,7 +189,7 @@ def main():
         # Update checkpoint
         checkpoint.mark_stage_completed(STAGE_NAME, {
             'selected_scenes': str(output_path),
-            'target_genre': args.target_genre,
+            'target_genre': args.genre,
             'top_k': args.top_k,
             'total_beats': total_beats,
             'total_candidates': total_candidates

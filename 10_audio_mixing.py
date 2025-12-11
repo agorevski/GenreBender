@@ -36,10 +36,10 @@ def main():
         'audio_mixing', args.input, args.genre
     )
     
-    # Validate prerequisites (stages 1-8)
+    # Validate prerequisites (stages 1-5, 15, 9)
     required_stages = ['shot_detection', 'keyframe_extraction', 'audio_extraction',
-                      'remote_analysis', 'genre_scoring', 'shot_selection',
-                      'narrative_generation', 'video_assembly']
+                      'subtitle_management', 'remote_analysis', 'timeline_construction',
+                      'video_assembly']
     for stage in required_stages:
         if not checkpoint.is_stage_completed(stage):
             logger.error(f"❌ Prerequisite stage '{stage}' not completed.")
@@ -66,7 +66,12 @@ def main():
     genre_profile = load_genre_profile(args.genre)
     
     # Load timeline
-    timeline_path = dirs['output'] / 'timeline.json'
+    timeline_path = dirs['output'] / 'trailer_timeline.json'
+    if not timeline_path.exists():
+        logger.error("Timeline not found. Run stage 15 first.")
+        print("\n❌ Error: Timeline not found. Run 15_timeline_constructor.py first!")
+        sys.exit(1)
+    
     with open(timeline_path, 'r') as f:
         timeline = json.load(f)
     

@@ -73,6 +73,7 @@ class TimelineConstructor:
         # Step 2: Select shots for each beat
         timeline_shots = []
         current_time = 0.0
+        used_shots = set()  # Track used shots to prevent duplicates
         
         for i, beat in enumerate(beats):
             beat_id = beat['id']
@@ -89,8 +90,13 @@ class TimelineConstructor:
                 candidates=candidates,
                 budget=budget,
                 start_time=current_time,
-                beat_index=i
+                beat_index=i,
+                used_shots=used_shots
             )
+            
+            # Track used shots
+            for shot in beat_shots:
+                used_shots.add(shot['shot_id'])
             
             timeline_shots.extend(beat_shots)
             current_time += budget['duration']
@@ -173,7 +179,8 @@ class TimelineConstructor:
         candidates: List[Dict],
         budget: Dict,
         start_time: float,
-        beat_index: int
+        beat_index: int,
+        used_shots: Optional[set] = None
     ) -> List[Dict]:
         """
         Select and time shots for a single beat.
@@ -184,21 +191,47 @@ class TimelineConstructor:
         - Montage: 6-10 quick cuts
         - Climax: 2-3 intense shots
         - Stinger: 1 punchy shot
+        
+        Args:
+            beat: Beat dictionary with metadata
+            candidates: List of candidate shots for this beat
+            budget: Time and shot count budget
+            start_time: Timeline start time for this beat
+            beat_index: Index of beat in sequence
+            used_shots: Set of shot IDs already used (for deduplication)
+        
+        Returns:
+            List of shot dictionaries with timeline assignments
         """
+        used_shots = used_shots or set()
         shots = []
         shot_count = budget['shot_count']
         total_duration = budget['duration']
         
-        # Ensure we have enough candidates
-        if len(candidates) < shot_count:
+        # Filter valid candidates (non-null paths and not already used)
+        valid_candidates = [
+            c for c in candidates
+            if c.get('shot_path') is not None  # Has valid shot file
+            and c['shot_id'] not in used_shots  # Not already used
+        ]
+        
+        if not valid_candidates:
             logger.warning(
-                f"Beat {beat['id']}: Only {len(candidates)} candidates "
+                f"Beat {beat['id']}: No valid candidates available "
+                f"(total candidates: {len(candidates)}, used shots: {len(used_shots)})"
+            )
+            return []
+        
+        # Ensure we have enough valid candidates
+        if len(valid_candidates) < shot_count:
+            logger.warning(
+                f"Beat {beat['id']}: Only {len(valid_candidates)} valid candidates "
                 f"for {shot_count} shots, using available"
             )
-            shot_count = len(candidates)
+            shot_count = len(valid_candidates)
         
         # Select top shots by score
-        selected = candidates[:shot_count]
+        selected = valid_candidates[:shot_count]
         
         # Allocate time per shot
         shot_durations = self._allocate_shot_durations(

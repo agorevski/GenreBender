@@ -121,7 +121,7 @@ class VideoAssembler:
         Raises:
             FileNotFoundError: If shot files missing
         """
-        timeline_shots = timeline.get('timeline', [])
+        timeline_shots = timeline.get('shots', [])
         if not timeline_shots:
             raise ValueError("Timeline contains no shots")
         
@@ -132,7 +132,8 @@ class VideoAssembler:
             shot_file = shots_dir / f"shot_{shot_id:04d}.mp4"
             if not shot_file.exists():
                 missing_shots.append(shot_id)
-            if 'duration' not in shot_data:
+            # Check for either 'duration' or 'timeline_duration'
+            if 'duration' not in shot_data and 'timeline_duration' not in shot_data:
                 missing_durations.append(shot_id)
         
         if missing_shots:
@@ -158,7 +159,7 @@ class VideoAssembler:
         """
         logger.info("Using simple concatenation method with per-shot trim...")
         
-        timeline_shots = timeline.get('timeline', [])
+        timeline_shots = timeline.get('shots', [])
         
         # Build input list
         inputs = []
@@ -174,7 +175,7 @@ class VideoAssembler:
         color_filter = self.genre_profile.get('color_grade', {}).get('filter', '') if self.enable_color_grading else ''
         
         for idx, shot_data in enumerate(timeline_shots):
-            duration = shot_data.get('duration')
+            duration = shot_data.get('timeline_duration') or shot_data.get('duration')
             vf_chain = color_filter if color_filter else 'null'
             filters.append(
                 f"[{idx}:v]{vf_chain},trim=duration={duration},setpts=PTS-STARTPTS[v{idx}]"
@@ -244,7 +245,7 @@ class VideoAssembler:
         """
         logger.info("Using complex filter with transitions...")
         
-        timeline_shots = timeline.get('timeline', [])
+        timeline_shots = timeline.get('shots', [])
         
         # Build filter_complex string
         filter_complex = self._build_filter_complex(
@@ -317,7 +318,7 @@ class VideoAssembler:
         # Step 1: Apply color grading (if enabled) and trim each input to timeline duration
         color_filter = self.genre_profile.get('color_grade', {}).get('filter', '') if self.enable_color_grading else ''
         for i, shot_data in enumerate(timeline_shots):
-            duration = shot_data.get('duration')
+            duration = shot_data.get('timeline_duration') or shot_data.get('duration')
             vf_chain = color_filter if color_filter else 'null'
             filters.append(f"[{i}:v]{vf_chain},trim=duration={duration},setpts=PTS-STARTPTS[v{i}]")
             filters.append(f"[{i}:a]atrim=duration={duration},asetpts=PTS-STARTPTS[a{i}]")
@@ -341,11 +342,11 @@ class VideoAssembler:
                 # offset = cumulative duration of all previous shots - transition duration
                 if i == 0:
                     # First transition
-                    first_shot_dur = timeline_shots[0].get('duration', 2)
+                    first_shot_dur = timeline_shots[0].get('timeline_duration') or timeline_shots[0].get('duration', 2)
                     transition_offset = first_shot_dur - trans_duration
                 else:
                     # Subsequent transitions
-                    prev_total = sum(timeline_shots[j].get('duration', 2) for j in range(next_idx))
+                    prev_total = sum(timeline_shots[j].get('timeline_duration') or timeline_shots[j].get('duration', 2) for j in range(next_idx))
                     transition_offset = prev_total - trans_duration
                 
                 output_label = f"v{next_idx}_{i}" if i < len(transitions) - 1 else "outv"

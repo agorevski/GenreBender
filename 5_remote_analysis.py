@@ -133,6 +133,12 @@ def main():
     cached_shots, uncached_shots = cache.get_batch(qualifying_shots)
     logger.info(f"Cache: {len(cached_shots)} cached, {len(uncached_shots)} to analyze")
     
+    # Show resume status if some shots are already cached
+    if cached_shots:
+        print(f"\n🔄 Resuming from previous run:")
+        print(f"  ✓ Already analyzed (cached): {len(cached_shots)}")
+        print(f"  → Remaining to analyze: {len(uncached_shots)}")
+    
     if uncached_shots:
         # Build server URLs from configuration
         server_host = config['remote_analysis'].get('server_host', 'localhost')
@@ -188,20 +194,29 @@ def main():
         )
         
         analyzed_shots = []
+        total_batches = (len(uncached_shots) + config['remote_analysis']['batch_size'] - 1) // config['remote_analysis']['batch_size']
+        batch_num = 0
+        
         for batch in batch_processor.batch_shots(uncached_shots):
-            logger.info(f"Analyzing batch of {len(batch)} shots...")
+            batch_num += 1
+            start_shot_id = batch[0].get('id', '?') if batch else '?'
+            end_shot_id = batch[-1].get('id', '?') if batch else '?'
+            logger.info(f"Analyzing batch {batch_num}/{total_batches} ({len(batch)} shots: {start_shot_id}-{end_shot_id})...")
+            print(f"  📦 Batch {batch_num}/{total_batches}: shots {start_shot_id}-{end_shot_id} ({len(batch)} shots)")
+            
             batch_results = analyzer.analyze_batch(batch, args.input)
             analyzed_shots.extend(batch_results)
             
-            # Save partial results
+            # Cache this batch immediately (persists to disk for resume capability)
+            cache.put_batch(batch_results)
+            logger.info(f"Cached batch {batch_num}/{total_batches} ({len(batch_results)} shots)")
+            
+            # Save partial results as backup
             partial_results_path = dirs['temp'] / 'partial_analysis.json'
             batch_processor.save_partial_results(
                 analyzed_shots,
                 str(partial_results_path)
             )
-        
-        # Cache new results
-        cache.put_batch(analyzed_shots)
         
         # Combine analyzed shots (cached + newly analyzed)
         analyzed_shots_combined = cached_shots + analyzed_shots

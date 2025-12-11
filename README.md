@@ -523,12 +523,12 @@ A beat sheet is a structured sequence of 8-12 "beats" (narrative moments) that d
 # Generate thriller beat sheet from story graph
 python 12_beat_sheet_generator.py \
   --movie-name "Airplane!" \
-  --target-genre thriller
+  --genre thriller
 
 # Generate horror version (force regeneration)
 python 12_beat_sheet_generator.py \
   --movie-name "Airplane!" \
-  --target-genre horror \
+  --genre horror \
   --force
 ```
 
@@ -538,24 +538,24 @@ python 12_beat_sheet_generator.py \
 # Basic usage
 python 12_beat_sheet_generator.py \
   --movie-name "Movie Title" \
-  --target-genre action
+  --genre action
 
 # Custom temperature for more creative beats
 python 12_beat_sheet_generator.py \
   --movie-name "Movie" \
-  --target-genre scifi \
+  --genre scifi \
   --temperature 0.8
 
 # Validate without generating
 python 12_beat_sheet_generator.py \
   --movie-name "Movie" \
-  --target-genre drama \
+  --genre drama \
   --validate-only
 
 # Custom output directory
 python 12_beat_sheet_generator.py \
   --movie-name "Movie" \
-  --target-genre comedy \
+  --genre comedy \
   --output-dir custom/path/
 ```
 
@@ -564,7 +564,7 @@ python 12_beat_sheet_generator.py \
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--movie-name` | Movie name (must match Stage 11 output) | Required |
-| `--target-genre` | Target genre (thriller/action/drama/horror/scifi/comedy/romance) | Required |
+| `--genre` | Target genre (thriller/action/drama/horror/scifi/comedy/romance) | Required |
 | `--output-dir` | Custom output directory | `outputs/story_graphs/<movie>/` |
 | `--force` | Force regeneration if beats.json exists | False |
 | `--temperature` | LLM temperature (0.0-1.0) | 0.7 (from settings.yaml) |

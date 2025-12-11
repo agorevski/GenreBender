@@ -6,8 +6,8 @@ Stage 12: Beat Sheet Generator
 Generates genre-specific trailer beat sheets from story graphs (Stage 11 output).
 
 Usage:
-    python 12_beat_sheet_generator.py --movie-name "Movie Title" --target-genre thriller
-    python 12_beat_sheet_generator.py --movie-name "Movie Title" --target-genre horror --force
+    python 12_beat_sheet_generator.py --movie-name "Movie Title" --genre thriller
+    python 12_beat_sheet_generator.py --movie-name "Movie Title" --genre horror --force
 
 Input:
     - story_graph.json from outputs/story_graphs/<movie>/
@@ -47,13 +47,13 @@ def parse_arguments():
         epilog="""
 Examples:
   # Generate thriller beat sheet
-  python 12_beat_sheet_generator.py --movie-name "Airplane!" --target-genre thriller
+  python 12_beat_sheet_generator.py --movie-name "Airplane!" --genre thriller
   
   # Generate horror beat sheet (force regeneration)
-  python 12_beat_sheet_generator.py --movie-name "Airplane!" --target-genre horror --force
+  python 12_beat_sheet_generator.py --movie-name "Airplane!" --genre horror --force
   
   # Custom output directory
-  python 12_beat_sheet_generator.py --movie-name "Movie" --target-genre action --output-dir custom/
+  python 12_beat_sheet_generator.py --movie-name "Movie" --genre action --output-dir custom/
 
 Available Genres:
   thriller, action, drama, horror, scifi, comedy, romance
@@ -68,7 +68,7 @@ Available Genres:
     )
     
     parser.add_argument(
-        '--target-genre',
+        '--genre',
         type=str,
         required=True,
         choices=['thriller', 'action', 'drama', 'horror', 'scifi', 'comedy', 'romance'],
@@ -158,7 +158,7 @@ def main():
     logger.info("Stage 12: Beat Sheet Generator")
     logger.info("=" * 80)
     logger.info(f"Movie: {args.movie_name}")
-    logger.info(f"Target Genre: {args.target_genre}")
+    logger.info(f"Target Genre: {args.genre}")
     logger.info(f"Output Directory: {output_dir}")
     logger.info(f"Force Regeneration: {args.force}")
     
@@ -223,7 +223,7 @@ def main():
         
         result = generator.generate_beat_sheet(
             story_graph=story_graph,
-            target_genre=args.target_genre,
+            target_genre=args.genre,
             output_dir=output_dir
         )
         
@@ -238,7 +238,7 @@ def main():
         # Save metadata
         metadata = {
             "movie_name": args.movie_name,
-            "target_genre": args.target_genre,
+            "target_genre": args.genre,
             "story_graph_path": str(story_graph_path),
             "generation_timestamp": datetime.now().isoformat(),
             "duration_seconds": duration,
@@ -258,7 +258,7 @@ def main():
         print("BEAT SHEET GENERATION COMPLETE")
         print("=" * 80)
         print(f"Movie: {args.movie_name}")
-        print(f"Genre: {args.target_genre}")
+        print(f"Genre: {args.genre}")
         print(f"Beat Count: {len(beat_sheet.get('beats', []))}")
         print(f"Duration: {duration:.1f}s")
         print(f"\nOutputs:")

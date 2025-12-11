@@ -47,7 +47,7 @@ class SceneRetriever:
         
         self.scene_embeddings = scene_embeddings.astype('float32')
         self.scene_ids = scene_ids
-        self.shot_metadata = {shot['shot_id']: shot for shot in shot_metadata}
+        self.shot_metadata = {shot['id']: shot for shot in shot_metadata}
         
         # Default scoring weights
         self.weights = scoring_weights or {
@@ -386,7 +386,14 @@ def retrieve_scenes(
     
     # Load metadata
     with open(shot_metadata_path) as f:
-        shot_metadata = json.load(f)
+        shot_metadata_json = json.load(f)
+        # Handle both formats: direct list or wrapped in "shots" key
+        if isinstance(shot_metadata_json, dict) and 'shots' in shot_metadata_json:
+            shot_metadata = shot_metadata_json['shots']
+        elif isinstance(shot_metadata_json, list):
+            shot_metadata = shot_metadata_json
+        else:
+            raise ValueError(f"Unexpected shot_metadata format: {type(shot_metadata_json)}")
     
     with open(beats_path) as f:
         beats_data = json.load(f)

@@ -36,10 +36,9 @@ def main():
         'video_assembly', args.input, args.genre
     )
     
-    # Validate prerequisites (stages 1-7)
+    # Validate prerequisites (stages 1-5, 15)
     required_stages = ['shot_detection', 'keyframe_extraction', 'audio_extraction',
-                      'remote_analysis', 'genre_scoring', 'shot_selection',
-                      'narrative_generation']
+                      'subtitle_management', 'remote_analysis', 'timeline_construction']
     for stage in required_stages:
         if not checkpoint.is_stage_completed(stage):
             logger.error(f"❌ Prerequisite stage '{stage}' not completed.")
@@ -65,17 +64,17 @@ def main():
     genre_profile = load_genre_profile(args.genre)
     
     # Load timeline
-    timeline_path = dirs['output'] / 'timeline.json'
+    timeline_path = dirs['output'] / 'trailer_timeline.json'
     if not timeline_path.exists():
-        logger.error("Timeline not found. Run stage 7 first.")
-        print("\n❌ Error: Timeline not found. Run 7_narrative_generation.py first!")
+        logger.error("Timeline not found. Run stage 15 first.")
+        print("\n❌ Error: Timeline not found. Run 15_timeline_constructor.py first!")
         sys.exit(1)
     
     with open(timeline_path, 'r') as f:
         timeline = json.load(f)
     
-    logger.info(f"Loaded timeline with {len(timeline.get('timeline', []))} shots")
-    logger.info(f"Timeline duration: {timeline.get('total_duration', 0):.1f}s")
+    logger.info(f"Loaded timeline with {len(timeline.get('shots', []))} shots")
+    logger.info(f"Timeline duration: {timeline.get('actual_duration', 0):.1f}s")
     
     # Load shot metadata (needed for transitions)
     shot_metadata_path = dirs['shots'] / 'shot_metadata.json'
@@ -147,7 +146,7 @@ def main():
         )
         
         logger.info(f"Video assembled: {assembled_video}")
-        logger.info(f"Duration: {timeline.get('total_duration', 0):.1f}s")
+        logger.info(f"Duration: {timeline.get('actual_duration', 0):.1f}s")
         
         # Get file size
         file_size_mb = Path(assembled_video).stat().st_size / (1024*1024)
@@ -156,8 +155,8 @@ def main():
         # Mark stage completed
         checkpoint.mark_stage_completed('video_assembly', {
             'output_file': str(assembled_video),
-            'duration': timeline.get('total_duration', 0),
-            'shots_count': len(timeline.get('timeline', [])),
+            'duration': timeline.get('actual_duration', 0),
+            'shots_count': len(timeline.get('shots', [])),
             'file_size_mb': round(file_size_mb, 2)
         })
         
@@ -168,8 +167,8 @@ def main():
         print("✓ VIDEO ASSEMBLY COMPLETED")
         print("=" * 60)
         print(f"Assembled video: {assembled_video}")
-        print(f"Duration: {timeline.get('total_duration', 0):.1f}s")
-        print(f"Shots: {len(timeline.get('timeline', []))}")
+        print(f"Duration: {timeline.get('actual_duration', 0):.1f}s")
+        print(f"Shots: {len(timeline.get('shots', []))}")
         print(f"File size: {file_size_mb:.1f} MB")
         print(f"Genre: {args.genre}")
         print(f"\n✓ Pipeline Progress: {stats['completed_stages']}/{stats['total_stages']} stages ({stats['progress_percent']:.1f}%)")
