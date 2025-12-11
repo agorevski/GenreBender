@@ -1,23 +1,33 @@
 # QWEN Server - Multimodal Shot Analysis
 
-FastAPI server for analyzing video shots using Qwen2-VL with multi-frame temporal analysis and audio feature integration.
+FastAPI server for analyzing video shots using Qwen VL models (Qwen2-VL, Qwen2.5-VL, Qwen3-VL) with multi-frame temporal analysis and audio feature integration.
 
 ## Features
 
-- **Qwen2-VL Integration**: Automatic model download from HuggingFace
+- **Qwen VL Integration**: Supports Qwen2-VL, Qwen2.5-VL, and Qwen3-VL model families with automatic detection
 - **Multi-Frame Analysis**: Processes 5 frames per shot for temporal understanding
 - **Audio-Aware**: Integrates MFCC and spectral audio features
 - **GPU Acceleration**: Automatic multi-GPU support (uses all 4 GPUs)
 - **API Authentication**: Bearer token authentication with hardcoded key
 - **Batch Processing**: Efficient batch endpoint for multiple shots
 - **Health Monitoring**: Health check endpoint with GPU status
+- **Model Family Auto-Detection**: Automatically selects correct model architecture based on model name
+
+## Supported Models
+
+| Model Family | Models | Architecture Class |
+|--------------|--------|-------------------|
+| Qwen2-VL | `Qwen/Qwen2-VL-2B-Instruct`, `Qwen/Qwen2-VL-7B-Instruct` | `Qwen2VLForConditionalGeneration` |
+| Qwen2.5-VL | `Qwen/Qwen2.5-VL-3B-Instruct`, `Qwen/Qwen2.5-VL-7B-Instruct`, `Qwen/Qwen2.5-VL-32B-Instruct`, `Qwen/Qwen2.5-VL-72B-Instruct` | `Qwen2_5_VLForConditionalGeneration` |
+| Qwen3-VL | `Qwen/Qwen3-VL-2B-Instruct`, `Qwen/Qwen3-VL-8B-Instruct` | `Qwen3VLForConditionalGeneration` |
 
 ## Requirements
 
 - Python 3.9+
 - CUDA-capable GPU (recommended, supports 4x GPUs)
-- ~4GB disk space for model
-- ~8GB GPU memory for Qwen2-VL-2B
+- transformers >= 4.51.0 (for Qwen3-VL support; 4.45.0 for Qwen2.5-VL)
+- Disk space: ~4GB for 2B/3B models, ~14GB for 7B models
+- GPU memory: ~8GB for 2B/3B, ~16GB for 7B (with float16)
 
 ## Quick Start
 
@@ -73,7 +83,13 @@ Edit `config.yaml` to customize settings:
 
 ```yaml
 model:
-  name: "Qwen/Qwen2-VL-2B-Instruct"  # Switch to 7B if needed
+  # Model selection - switch between models as needed
+  name: "Qwen/Qwen2.5-VL-7B-Instruct"
+  
+  # Model family - determines which architecture class to use
+  # Options: "auto" (recommended), "qwen2_vl", "qwen2_5_vl", "qwen3_vl"
+  model_family: "auto"
+  
   device: "cuda"                      # cuda or cpu
   dtype: "float16"                    # float16 or float32
   
@@ -87,6 +103,22 @@ processing:
   enable_audio_fusion: true
   temporal_weight: 0.3
   audio_weight: 0.2
+```
+
+### Model Family Detection
+
+The server automatically detects the model family from the model name:
+
+- Names containing `qwen3-vl` or `qwen3_vl` → uses `Qwen3VLForConditionalGeneration`
+- Names containing `qwen2.5-vl`, `qwen2_5-vl`, or `qwen2.5_vl` → uses `Qwen2_5_VLForConditionalGeneration`
+- Names containing `qwen2-vl` or `qwen2_vl` → uses `Qwen2VLForConditionalGeneration`
+
+You can also explicitly set `model_family` to override auto-detection:
+
+```yaml
+model:
+  name: "Qwen/Qwen2.5-VL-7B-Instruct"
+  model_family: "qwen2_5_vl"  # Explicit override
 ```
 
 ## API Endpoints
@@ -240,6 +272,28 @@ lsof -i :8000
 cat qwen_server.log
 ```
 
+### Model Architecture Mismatch Error
+
+If you see an error like:
+```
+You are using a model of type qwen3_vl to instantiate a model of type qwen2_vl
+```
+
+This means the model family doesn't match the model. Fix by:
+
+1. Update `config.yaml` with correct model family:
+```yaml
+model:
+  name: "Qwen/Qwen2.5-VL-7B-Instruct"
+  model_family: "qwen2_5_vl"  # Match the model version
+```
+
+2. Or use auto-detection:
+```yaml
+model:
+  model_family: "auto"
+```
+
 ### Out of Memory
 
 Edit `config.yaml`:
@@ -254,6 +308,12 @@ processing:
   max_batch_size: 5  # Reduce from 10
 ```
 
+Or use a smaller model:
+```yaml
+model:
+  name: "Qwen/Qwen2.5-VL-3B-Instruct"  # Smaller than 7B
+```
+
 ### CUDA Not Detected
 
 ```bash
@@ -261,18 +321,32 @@ processing:
 nvidia-smi
 
 # Reinstall PyTorch with CUDA
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124
 ```
 
 ### Model Download Failed
 
 ```bash
-# Manually download with Python
+# Manually download Qwen2.5-VL with Python
+python3 -c "
+from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
+AutoProcessor.from_pretrained('Qwen/Qwen2.5-VL-7B-Instruct', cache_dir='~/.cache/huggingface', trust_remote_code=True)
+Qwen2_5_VLForConditionalGeneration.from_pretrained('Qwen/Qwen2.5-VL-7B-Instruct', cache_dir='~/.cache/huggingface', trust_remote_code=True)
+"
+
+# Or for Qwen2-VL
 python3 -c "
 from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
-AutoProcessor.from_pretrained('Qwen/Qwen2-VL-2B-Instruct', cache_dir='~/.cache/huggingface')
-Qwen2VLForConditionalGeneration.from_pretrained('Qwen/Qwen2-VL-2B-Instruct', cache_dir='~/.cache/huggingface')
+AutoProcessor.from_pretrained('Qwen/Qwen2-VL-2B-Instruct', cache_dir='~/.cache/huggingface', trust_remote_code=True)
+Qwen2VLForConditionalGeneration.from_pretrained('Qwen/Qwen2-VL-2B-Instruct', cache_dir='~/.cache/huggingface', trust_remote_code=True)
 "
+```
+
+### Qwen2_5_VLForConditionalGeneration Not Found
+
+Upgrade transformers to version 4.45.0 or later:
+```bash
+pip install --upgrade transformers>=4.45.0
 ```
 
 ## Performance
@@ -286,17 +360,52 @@ Expected performance with 4x GPUs:
 
 ## Switching Models
 
-To use the larger 7B model, edit `config.yaml`:
+### Switching Model Size
+
+To use a different model size, edit `config.yaml`:
 
 ```yaml
 model:
-  name: "Qwen/Qwen2-VL-7B-Instruct"  # ~14GB model
+  name: "Qwen/Qwen2.5-VL-7B-Instruct"  # ~14GB model
+  model_family: "auto"  # Will auto-detect qwen2_5_vl
 ```
 
 Then re-run setup to download:
 ```bash
 ./setup.sh
 ```
+
+### Switching Model Family
+
+To switch between model families:
+
+```yaml
+# Qwen2-VL (older, smaller models)
+model:
+  name: "Qwen/Qwen2-VL-2B-Instruct"
+  model_family: "auto"  # or explicitly "qwen2_vl"
+
+# Qwen2.5-VL (improved quality)
+model:
+  name: "Qwen/Qwen2.5-VL-7B-Instruct"
+  model_family: "auto"  # or explicitly "qwen2_5_vl"
+
+# Qwen3-VL (latest, best performance)
+model:
+  name: "Qwen/Qwen3-VL-8B-Instruct"
+  model_family: "auto"  # or explicitly "qwen3_vl"
+```
+
+### Model Comparison
+
+| Model | Parameters | VRAM (fp16) | Speed | Recommended For |
+|-------|------------|-------------|-------|-----------------|
+| Qwen2-VL-2B | 2.2B | ~8GB | Fast | Development, testing |
+| Qwen2.5-VL-3B | 3B | ~10GB | Fast | Good balance |
+| Qwen2.5-VL-7B | 7B | ~16GB | Medium | Production |
+| Qwen2.5-VL-32B | 32B | ~70GB | Slow | Highest quality |
+| Qwen3-VL-2B | 2B | ~8GB | Fast | Development, latest arch |
+| Qwen3-VL-8B | 8B | ~18GB | Medium | Production (recommended) |
 
 ## Development
 

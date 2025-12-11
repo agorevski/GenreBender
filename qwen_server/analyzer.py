@@ -1,6 +1,7 @@
 """
-Multimodal shot analyzer using Qwen2-VL.
+Multimodal shot analyzer using Qwen VL models (Qwen2-VL, Qwen2.5-VL, Qwen3-VL).
 Processes multiple frames and audio features for comprehensive scene understanding.
+Supports Qwen2-VL, Qwen2.5-VL, and Qwen3-VL model families with automatic handling.
 """
 
 import base64
@@ -17,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 class MultimodalAnalyzer:
     """
-    Analyzes video shots using Qwen2-VL with multi-frame and audio integration.
+    Analyzes video shots using Qwen VL models with multi-frame and audio integration.
+    Supports Qwen2-VL, Qwen2.5-VL, and Qwen3-VL model families.
     """
     
     def __init__(self, model, processor, config: dict):
@@ -25,13 +27,27 @@ class MultimodalAnalyzer:
         Initialize analyzer with model and configuration.
         
         Args:
-            model: Qwen2VL model instance
-            processor: Qwen2VL processor
+            model: Qwen VL model instance (Qwen2-VL, Qwen2.5-VL, or Qwen3-VL)
+            processor: Qwen VL processor
             config: Configuration dictionary
         """
         self.model = model
         self.processor = processor
         self.config = config
+        
+        # Detect model family for any family-specific handling
+        self.model_family = config['model'].get('model_family', 'auto')
+        if self.model_family == 'auto':
+            # Try to detect from model name
+            model_name = config['model'].get('name', '').lower()
+            if 'qwen3-vl' in model_name or 'qwen3_vl' in model_name:
+                self.model_family = 'qwen3_vl'
+            elif 'qwen2.5' in model_name or 'qwen2_5' in model_name:
+                self.model_family = 'qwen2_5_vl'
+            else:
+                self.model_family = 'qwen2_vl'
+        
+        logger.info(f"Analyzer initialized with model family: {self.model_family}")
         
         self.enable_audio_fusion = config['processing']['enable_audio_fusion']
         self.temporal_weight = config['processing']['temporal_weight']

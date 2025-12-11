@@ -66,16 +66,16 @@ pip install -r requirements.txt
 # Download model
 echo ""
 echo "=========================================="
-echo "Downloading Qwen2-VL-2B Model"
+echo "Downloading Qwen VL Model"
 echo "=========================================="
-echo "This will download ~4GB of data..."
+echo "This will download the model weights..."
 echo "The model will be cached in ~/.cache/huggingface/"
 echo ""
 
 python3 << 'PYTHON'
 import yaml
 import logging
-from model_loader import download_model
+from model_loader import download_model, detect_model_family, MODEL_FAMILY_AUTO
 
 logging.basicConfig(level=logging.INFO)
 
@@ -85,9 +85,19 @@ with open('config.yaml', 'r') as f:
 
 model_name = config['model']['name']
 cache_dir = config['model']['cache_dir']
+model_family = config['model'].get('model_family', MODEL_FAMILY_AUTO)
 
-print(f"Downloading {model_name}...")
-success = download_model(model_name, cache_dir)
+# Detect model family for display
+if model_family == MODEL_FAMILY_AUTO:
+    detected_family = detect_model_family(model_name)
+    print(f"Model: {model_name}")
+    print(f"Detected family: {detected_family}")
+else:
+    print(f"Model: {model_name}")
+    print(f"Configured family: {model_family}")
+
+print(f"\nDownloading {model_name}...")
+success = download_model(model_name, cache_dir, model_family)
 
 if success:
     print("\n✓ Model downloaded successfully!")
@@ -107,7 +117,7 @@ python3 << 'PYTHON'
 import yaml
 import logging
 import torch
-from model_loader import ModelLoader
+from model_loader import ModelLoader, detect_model_family, MODEL_FAMILY_AUTO
 
 logging.basicConfig(level=logging.INFO)
 
@@ -123,6 +133,17 @@ if torch.cuda.is_available():
     print(f"GPU count: {torch.cuda.device_count()}")
     for i in range(torch.cuda.device_count()):
         print(f"  GPU {i}: {torch.cuda.get_device_name(i)}")
+
+# Show model family info
+model_name = config['model']['name']
+model_family = config['model'].get('model_family', MODEL_FAMILY_AUTO)
+if model_family == MODEL_FAMILY_AUTO:
+    detected_family = detect_model_family(model_name)
+    print(f"\nModel: {model_name}")
+    print(f"Detected family: {detected_family}")
+else:
+    print(f"\nModel: {model_name}")
+    print(f"Configured family: {model_family}")
 
 # Try loading model
 print("\nAttempting to load model...")

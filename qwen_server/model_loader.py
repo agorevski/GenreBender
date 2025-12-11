@@ -1,21 +1,117 @@
 """
-Model loader for Qwen2-VL.
-Handles downloading, caching, and initialization of the vision-language model.
+Model loader for Qwen VL models (Qwen2-VL, Qwen2.5-VL, Qwen3-VL).
+Handles downloading, caching, and initialization of vision-language models.
+Supports automatic detection of model family from model name.
 """
 
 import os
+import re
 import torch
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union, Any
 import logging
-from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
 
 logger = logging.getLogger(__name__)
 
+# Model family constants
+MODEL_FAMILY_QWEN2_VL = "qwen2_vl"
+MODEL_FAMILY_QWEN2_5_VL = "qwen2_5_vl"
+MODEL_FAMILY_QWEN3_VL = "qwen3_vl"
+MODEL_FAMILY_AUTO = "auto"
+
+# Supported model families and their patterns
+# Order matters: check more specific patterns first (qwen3 before qwen2.5 before qwen2)
+MODEL_FAMILY_PATTERNS = {
+    MODEL_FAMILY_QWEN3_VL: [r"qwen3-vl", r"qwen3_vl"],
+    MODEL_FAMILY_QWEN2_5_VL: [r"qwen2\.5-vl", r"qwen2_5-vl", r"qwen2\.5_vl"],
+    MODEL_FAMILY_QWEN2_VL: [r"qwen2-vl", r"qwen2_vl"],
+}
+
+
+def detect_model_family(model_name: str) -> str:
+    """
+    Detect model family from model name.
+    
+    Args:
+        model_name: HuggingFace model name (e.g., "Qwen/Qwen2.5-VL-7B-Instruct", "Qwen/Qwen3-VL-8B-Instruct")
+        
+    Returns:
+        Model family string (qwen2_vl, qwen2_5_vl, or qwen3_vl)
+    """
+    model_name_lower = model_name.lower()
+    
+    # Check patterns in order (qwen3 before qwen2.5 before qwen2 to avoid false matches)
+    for family, patterns in MODEL_FAMILY_PATTERNS.items():
+        for pattern in patterns:
+            if re.search(pattern, model_name_lower):
+                logger.info(f"Detected model family: {family} (from pattern: {pattern})")
+                return family
+    
+    # Default to qwen3_vl as it's the newest
+    logger.warning(f"Could not detect model family from '{model_name}', defaulting to {MODEL_FAMILY_QWEN3_VL}")
+    return MODEL_FAMILY_QWEN3_VL
+
+
+def get_model_class(model_family: str):
+    """
+    Get the appropriate model class for the specified family.
+    
+    Args:
+        model_family: Model family string
+        
+    Returns:
+        Model class from transformers
+    """
+    if model_family == MODEL_FAMILY_QWEN2_VL:
+        from transformers import Qwen2VLForConditionalGeneration
+        logger.info("Using Qwen2VLForConditionalGeneration")
+        return Qwen2VLForConditionalGeneration
+    elif model_family == MODEL_FAMILY_QWEN2_5_VL:
+        # Qwen2.5-VL uses Qwen2_5_VLForConditionalGeneration in transformers >= 4.45
+        try:
+            from transformers import Qwen2_5_VLForConditionalGeneration
+            logger.info("Using Qwen2_5_VLForConditionalGeneration")
+            return Qwen2_5_VLForConditionalGeneration
+        except ImportError:
+            # Fallback for older transformers versions
+            logger.warning("Qwen2_5_VLForConditionalGeneration not found, trying AutoModelForVision2Seq")
+            from transformers import AutoModelForVision2Seq
+            return AutoModelForVision2Seq
+    elif model_family == MODEL_FAMILY_QWEN3_VL:
+        # Qwen3-VL uses Qwen3VLForConditionalGeneration in transformers >= 4.51
+        try:
+            from transformers import Qwen3VLForConditionalGeneration
+            logger.info("Using Qwen3VLForConditionalGeneration")
+            return Qwen3VLForConditionalGeneration
+        except ImportError:
+            # Fallback: try AutoModelForVision2Seq with trust_remote_code
+            logger.warning("Qwen3VLForConditionalGeneration not found, trying AutoModelForVision2Seq")
+            from transformers import AutoModelForVision2Seq
+            return AutoModelForVision2Seq
+    else:
+        raise ValueError(f"Unknown model family: {model_family}")
+
+
+def get_processor_class(model_family: str):
+    """
+    Get the appropriate processor class for the specified family.
+    
+    Args:
+        model_family: Model family string
+        
+    Returns:
+        Processor class from transformers
+    """
+    # AutoProcessor works for all Qwen VL models
+    from transformers import AutoProcessor
+    return AutoProcessor
+
+
 class ModelLoader:
     """
-    Manages loading and initialization of Qwen2-VL models.
+    Manages loading and initialization of Qwen VL models.
     Supports automatic downloading from HuggingFace Hub.
+    Handles Qwen2-VL, Qwen2.5-VL, and Qwen3-VL model families.
     """
     
     def __init__(self, config: dict):
@@ -31,6 +127,14 @@ class ModelLoader:
         self.cache_dir = os.path.expanduser(config['model']['cache_dir'])
         self.max_length = config['model'].get('max_length', 512)
         
+        # Model family detection
+        configured_family = config['model'].get('model_family', MODEL_FAMILY_AUTO)
+        if configured_family == MODEL_FAMILY_AUTO:
+            self.model_family = detect_model_family(self.model_name)
+        else:
+            self.model_family = configured_family
+            logger.info(f"Using configured model family: {self.model_family}")
+        
         # Multi-GPU configuration
         self.use_data_parallel = config['model'].get('use_data_parallel', False)
         self.data_parallel_devices = config['model'].get('data_parallel_devices', None)
@@ -41,15 +145,16 @@ class ModelLoader:
         # Convert dtype string to torch dtype
         self.torch_dtype = torch.float16 if self.dtype == "float16" else torch.float32
     
-    def load_model(self) -> Tuple[Qwen2VLForConditionalGeneration, AutoProcessor]:
+    def load_model(self) -> Tuple[Any, Any]:
         """
-        Load the Qwen2-VL model and processor.
+        Load the Qwen VL model and processor.
         Downloads from HuggingFace if not cached.
         
         Returns:
             Tuple of (model, processor)
         """
         logger.info(f"Loading model: {self.model_name}")
+        logger.info(f"Model family: {self.model_family}")
         logger.info(f"Device: {self.device}")
         logger.info(f"Dtype: {self.dtype}")
         
@@ -69,9 +174,13 @@ class ModelLoader:
                 logger.info(f"  GPU {i}: {gpu_name} ({gpu_memory:.1f} GB)")
         
         try:
+            # Get appropriate classes for this model family
+            ModelClass = get_model_class(self.model_family)
+            ProcessorClass = get_processor_class(self.model_family)
+            
             # Load processor
             logger.info("Loading processor...")
-            self.processor = AutoProcessor.from_pretrained(
+            self.processor = ProcessorClass.from_pretrained(
                 self.model_name,
                 cache_dir=self.cache_dir,
                 trust_remote_code=True
@@ -85,7 +194,7 @@ class ModelLoader:
                 logger.info(f"Using DataParallel mode across {torch.cuda.device_count()} GPUs")
                 
                 # Load model on primary GPU (cuda:0) without device_map
-                self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+                self.model = ModelClass.from_pretrained(
                     self.model_name,
                     cache_dir=self.cache_dir,
                     torch_dtype=self.torch_dtype,
@@ -124,7 +233,7 @@ class ModelLoader:
                 if self.use_data_parallel:
                     logger.warning("DataParallel requested but only 1 GPU available or not using CUDA")
                 
-                self.model = Qwen2VLForConditionalGeneration.from_pretrained(
+                self.model = ModelClass.from_pretrained(
                     self.model_name,
                     cache_dir=self.cache_dir,
                     torch_dtype=self.torch_dtype,
@@ -145,11 +254,12 @@ class ModelLoader:
                 logger.info("Enabled cuDNN auto-tuner for optimized kernels")
             
             # Configure generation to avoid warnings
-            if hasattr(self.model, 'generation_config'):
-                self.model.generation_config.temperature = None
-                self.model.generation_config.top_p = None
-                self.model.generation_config.top_k = None
-                self.model.generation_config.do_sample = False
+            model_for_config = self.model.module if isinstance(self.model, torch.nn.DataParallel) else self.model
+            if hasattr(model_for_config, 'generation_config'):
+                model_for_config.generation_config.temperature = None
+                model_for_config.generation_config.top_p = None
+                model_for_config.generation_config.top_k = None
+                model_for_config.generation_config.do_sample = False
             
             logger.info("Model loaded successfully!")
             
@@ -190,6 +300,7 @@ class ModelLoader:
         
         info = {
             "model_name": self.model_name,
+            "model_family": self.model_family,
             "device": str(next(self.model.parameters()).device),
             "dtype": str(next(self.model.parameters()).dtype),
             "parameters": sum(p.numel() for p in self.model.parameters()),
@@ -202,7 +313,8 @@ class ModelLoader:
         
         return info
 
-def download_model(model_name: str, cache_dir: str) -> bool:
+
+def download_model(model_name: str, cache_dir: str, model_family: str = MODEL_FAMILY_AUTO) -> bool:
     """
     Pre-download model to cache directory.
     Useful for setup scripts.
@@ -210,6 +322,7 @@ def download_model(model_name: str, cache_dir: str) -> bool:
     Args:
         model_name: HuggingFace model name
         cache_dir: Cache directory path
+        model_family: Model family (auto-detected if not specified)
         
     Returns:
         True if successful
@@ -217,15 +330,25 @@ def download_model(model_name: str, cache_dir: str) -> bool:
     try:
         logger.info(f"Downloading model: {model_name}")
         
+        # Detect family if auto
+        if model_family == MODEL_FAMILY_AUTO:
+            model_family = detect_model_family(model_name)
+        
+        # Get appropriate classes
+        ModelClass = get_model_class(model_family)
+        ProcessorClass = get_processor_class(model_family)
+        
         # Download processor
-        AutoProcessor.from_pretrained(
+        logger.info("Downloading processor...")
+        ProcessorClass.from_pretrained(
             model_name,
             cache_dir=cache_dir,
             trust_remote_code=True
         )
         
         # Download model
-        Qwen2VLForConditionalGeneration.from_pretrained(
+        logger.info("Downloading model weights...")
+        ModelClass.from_pretrained(
             model_name,
             cache_dir=cache_dir,
             trust_remote_code=True

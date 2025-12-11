@@ -10,10 +10,10 @@ if [ -d "venv_qwen_server" ]; then
 fi
 
 # Get configuration
-MULTI_SERVER_MODE=$(python3 -c "import yaml; config=yaml.safe_load(open('config.yaml')); print(str(config['server'].get('multi_server_mode', False)).lower())")
-BASE_PORT=$(python3 -c "import yaml; config=yaml.safe_load(open('config.yaml')); print(config['server'].get('multi_server_base_port', 8000))")
-HOST=$(python3 -c "import yaml; config=yaml.safe_load(open('config.yaml')); print(config['server']['host'])")
-API_KEY=$(python3 -c "import yaml; config=yaml.safe_load(open('config.yaml')); print(config['server']['api_key'])")
+MULTI_SERVER_MODE=$(python -c "import yaml; config=yaml.safe_load(open('config.yaml')); print(str(config['server'].get('multi_server_mode', False)).lower())")
+BASE_PORT=$(python -c "import yaml; config=yaml.safe_load(open('config.yaml')); print(config['server'].get('multi_server_base_port', 8000))")
+HOST=$(python -c "import yaml; config=yaml.safe_load(open('config.yaml')); print(config['server']['host'])")
+API_KEY=$(python -c "import yaml; config=yaml.safe_load(open('config.yaml')); print(config['server']['api_key'])")
 
 echo "=========================================="
 echo "Starting QWEN Server"
@@ -31,7 +31,7 @@ if [ "$MULTI_SERVER_MODE" = "true" ]; then
     echo "Mode: Multi-Server (True Multi-GPU Parallelism)"
     
     # Get GPU list
-    GPUS=$(python3 -c "import yaml; config=yaml.safe_load(open('config.yaml')); print(' '.join(map(str, config['server'].get('multi_server_gpus', [0, 1, 2, 3]))))")
+    GPUS=$(python -c "import yaml; config=yaml.safe_load(open('config.yaml')); print(' '.join(map(str, config['server'].get('multi_server_gpus', [0, 1, 2, 3]))))")
     GPU_ARRAY=($GPUS)
     NUM_GPUS=${#GPU_ARRAY[@]}
     
@@ -47,7 +47,7 @@ if [ "$MULTI_SERVER_MODE" = "true" ]; then
         echo "Starting Server $((i+1))/$NUM_GPUS on GPU $GPU_ID, Port $PORT..."
         
         # Start server in background with specific GPU
-        CUDA_VISIBLE_DEVICES=$GPU_ID python3 server.py --port $PORT > "server_${PORT}.log" 2>&1 &
+        CUDA_VISIBLE_DEVICES=$GPU_ID python server.py --port $PORT > "server_${PORT}.log" 2>&1 &
         SERVER_PID=$!
         echo $SERVER_PID >> "$PID_FILE"
         
@@ -128,5 +128,5 @@ else
     echo ""
     
     # Start single server (foreground)
-    python3 server.py
+    python server.py
 fi
