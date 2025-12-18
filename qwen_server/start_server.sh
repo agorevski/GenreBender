@@ -1,7 +1,11 @@
 #!/bin/bash
 # Start QWEN server (single or multi-server mode)
+# Run directly or via tmux_launch.sh for monitoring UI
 
 set -e  # Exit on error
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 # Activate virtual environment if it exists
 if [ -d "venv_qwen_server" ]; then
@@ -113,7 +117,7 @@ if [ "$MULTI_SERVER_MODE" = "true" ]; then
     fi
     
 else
-    # Single-server mode (original behavior)
+    # Single-server mode
     echo "Mode: Single-Server"
     PORT=$BASE_PORT
     echo "Port: $PORT"
@@ -123,10 +127,30 @@ else
     echo "  Analyze: http://localhost:$PORT/analyze"
     echo "  Batch: http://localhost:$PORT/analyze_batch"
     echo ""
-    echo "Press Ctrl+C to stop the server"
-    echo "=========================================="
+    
+    # Start single server in background
+    python server.py --port $PORT > "server_${PORT}.log" 2>&1 &
+    SERVER_PID=$!
+    echo $SERVER_PID >> "$PID_FILE"
+    
+    echo "Server started with PID: $SERVER_PID"
+    echo "Log: server_${PORT}.log"
     echo ""
     
-    # Start single server (foreground)
-    python server.py
+    # Wait for health check
+    echo "Waiting for server to be ready..."
+    sleep 5
+    
+    if curl -s -f "http://localhost:${PORT}/health" > /dev/null 2>&1; then
+        echo "✓ Server is healthy!"
+    else
+        echo "⚠ Server may still be initializing. Check logs: server_${PORT}.log"
+    fi
+    
+    echo ""
+    echo "To stop server: ./stop_server.sh"
+    echo "=========================================="
 fi
+
+echo ""
+echo "Ready for commands."
