@@ -47,6 +47,9 @@ def main():
             sys.exit(1)
     
     # Validate genre-dependent prerequisites
+    # Reload checkpoint to get latest state (important for parallel execution)
+    checkpoint.reload()
+    
     genre_stages = ['timeline_construction', 'video_assembly']
     for stage in genre_stages:
         if not checkpoint.is_stage_completed(stage, args.genre):

@@ -109,6 +109,11 @@ class CheckpointManager:
         except Exception as e:
             logger.error(f"Failed to save checkpoint: {e}")
     
+    def reload(self):
+        """Reload checkpoint from disk to get latest state (useful in parallel execution)."""
+        self.data = self._load()
+        logger.debug(f"Reloaded checkpoint from {self.checkpoint_path}")
+    
     def mark_stage_completed(self, stage: str, metadata: Optional[Dict] = None, genre: Optional[str] = None):
         """
         Mark a stage as completed.
