@@ -18,10 +18,11 @@ import sys
 from pathlib import Path
 
 from pipeline_common import (
-    initialize_stage,
+    initialize_genre_stage,
     load_config,
     print_completion_message,
-    sanitize_filename
+    sanitize_filename,
+    get_story_graph_dir
 )
 from trailer_generator.narrative.azure_client import AzureOpenAIClient
 from trailer_generator.embeddings.embedding_generator import generate_embeddings
@@ -59,15 +60,14 @@ def validate_inputs(args, output_dir: Path) -> tuple:
         logger.error("Please run stages 1-5 first")
         sys.exit(1)
     
-    # Determine movie name
+    # Determine movie name (use input filename if not provided)
     movie_name = args.movie_name
     if not movie_name:
-        # Use sanitized input filename
-        from pipeline_common import sanitize_filename
-        movie_name = sanitize_filename(Path(args.input).stem)
+        movie_name = Path(args.input).stem
     
     # Check beat sheet (from stage 12) - genre-specific file
-    story_graph_dir = Path('outputs') / 'story_graphs' / movie_name
+    # Use get_story_graph_dir() to ensure proper sanitization (e.g., "Role Models" -> "Role_Models")
+    story_graph_dir = get_story_graph_dir(movie_name)
     beats_path = story_graph_dir / f'beats_{args.genre}.json'
     
     if not beats_path.exists():
@@ -96,7 +96,7 @@ def main():
     args = parse_args()
     
     # Initialize stage with checkpoint (genre-dependent stage)
-    output_base, dirs, checkpoint, logger = initialize_stage(
+    output_base, dirs, checkpoint, logger = initialize_genre_stage(
         STAGE_NAME, 
         args.input, 
         args.genre
@@ -123,11 +123,14 @@ def main():
         api_version=azure_config.get('api_version')
     )
     
-    # Generate embeddings
+    # Generate embeddings - use genre-specific directory
     logger.info("Generating embeddings...")
     
-    embeddings_dir = output_base / 'embeddings'
+    # Use genre-specific embeddings directory
+    embeddings_dir = dirs['genre_embeddings']
     embeddings_dir.mkdir(parents=True, exist_ok=True)
+    
+    logger.info(f"Embeddings output: {embeddings_dir}")
     
     try:
         scene_emb_path, beat_emb_path = generate_embeddings(

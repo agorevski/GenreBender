@@ -21,7 +21,8 @@ from pathlib import Path
 from pipeline_common import (
     setup_logging,
     load_config,
-    get_output_base_dir
+    get_output_base_dir,
+    get_genre_output_dir
 )
 from trailer_generator.checkpoint import CheckpointManager
 from trailer_generator.narrative.timeline_constructor import construct_timeline
@@ -68,19 +69,19 @@ def parse_args():
     
     return parser.parse_args()
 
-def validate_inputs(output_dir: Path) -> Path:
+def validate_inputs(genre_output_dir: Path, args) -> Path:
     """
     Validate required input files exist.
     
     Returns:
         Path to selected_scenes.json
     """
-    # Check selected scenes (from stage 14)
-    selected_scenes_path = output_dir / 'output' / 'selected_scenes.json'
+    # Check selected scenes (from stage 14) - now in genre-specific directory
+    selected_scenes_path = genre_output_dir / 'selected_scenes.json'
     
     if not selected_scenes_path.exists():
         logger.error(f"Selected scenes not found: {selected_scenes_path}")
-        logger.error("Please run stage 14 first")
+        logger.error(f"Please run stage 14 first: python 14_scene_retrieval.py --input {args.input} --genre {args.genre}")
         sys.exit(1)
     
     logger.info(f"Input validation complete:")
@@ -100,6 +101,10 @@ def main():
     log_level = 'DEBUG' if args.verbose else 'INFO'
     setup_logging(log_file, level=log_level)
     
+    # Get genre-specific output directory
+    genre_output_dir = get_genre_output_dir(args.input, args.genre)
+    genre_output_dir.mkdir(parents=True, exist_ok=True)
+    
     logger.info("="*60)
     logger.info(f"Stage 15: Timeline Construction")
     logger.info("="*60)
@@ -107,6 +112,7 @@ def main():
     logger.info(f"Genre: {args.genre}")
     logger.info(f"Target Duration: {args.target_duration}s")
     logger.info(f"Output: {output_dir}")
+    logger.info(f"Genre Output: {genre_output_dir}")
     
     # Check if already completed for this genre
     checkpoint = CheckpointManager(output_dir / 'checkpoint.json')
@@ -115,7 +121,7 @@ def main():
         return 0
     
     # Validate inputs
-    selected_scenes_path = validate_inputs(output_dir)
+    selected_scenes_path = validate_inputs(genre_output_dir, args)
     
     # Load configuration
     config = load_config()
@@ -123,7 +129,8 @@ def main():
     # Construct timeline
     logger.info("Constructing timeline...")
     
-    output_path = output_dir / 'output' / 'trailer_timeline.json'
+    # Use genre-specific output path
+    output_path = genre_output_dir / 'trailer_timeline.json'
     
     try:
         timeline = construct_timeline(

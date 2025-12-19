@@ -285,15 +285,17 @@ All outputs for a video are organized in `outputs/<sanitized_filename>/`:
 - **shots/shot_metadata.json**: Complete shot information with analysis
 - **keyframes/**: Extracted frames (5 per shot)
 - **cache/analysis_cache.json**: Cached multimodal analysis results
-- **embeddings/scene_embeddings.pkl**: Scene vector embeddings
 - **checkpoint.json**: Pipeline state for resuming (includes per-genre tracking)
 - **trailer_generator.log**: Detailed execution logs
 
-**Genre-Specific Outputs:**
+**Genre-Specific Outputs (in trailers/<genre>/):**
+- **trailers/<genre>/embeddings/**: Genre-specific scene and beat embeddings
+  - `scene_embeddings.pkl`: Scene vector embeddings
+  - `beat_embeddings.pkl`: Beat vector embeddings
+- **trailers/<genre>/selected_scenes.json**: Beat-matched scene candidates
+- **trailers/<genre>/trailer_timeline.json**: Deterministic shot-level timeline
 - **trailers/<genre>/trailer_<genre>_assembled.mp4**: Video without final audio
 - **trailers/<genre>/trailer_<genre>_final.mp4**: FINAL broadcast-ready trailer
-- **output/selected_scenes.json**: Beat-matched scene candidates
-- **output/trailer_timeline.json**: Deterministic shot-level timeline
 
 **Story Graph Outputs (in outputs/story_graphs/<movie_name>/):**
 - **story_graph.json**: Semantic story structure (shared across genres)

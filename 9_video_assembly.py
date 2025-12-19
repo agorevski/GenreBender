@@ -51,10 +51,9 @@ def main():
     genre_stages = ['timeline_construction']
     for stage in genre_stages:
         if not checkpoint.is_stage_completed(stage, args.genre):
-            logger.error(f"❌ Prerequisite stage '{stage}' not completed.")
-            print(f"\n❌ Error: You must complete all previous stages first!")
-            print(f"Missing: {stage}")
-            print(f"Run: {required_stages.index(stage) + 1}_{stage}.py")
+            logger.error(f"❌ Prerequisite stage '{stage}' not completed for genre '{args.genre}'.")
+            print(f"\n❌ Error: You must complete stage '{stage}' for genre '{args.genre}' first!")
+            print(f"Run: python 15_{stage}.py --input {args.input} --genre {args.genre}")
             sys.exit(1)
     
     # Genre-specific output path
@@ -77,11 +76,13 @@ def main():
     config = load_config(args.config)
     genre_profile = load_genre_profile(args.genre)
     
-    # Load timeline
-    timeline_path = dirs['output'] / 'trailer_timeline.json'
+    # Load timeline from genre-specific directory
+    timeline_path = genre_output_dir / 'trailer_timeline.json'
     if not timeline_path.exists():
-        logger.error("Timeline not found. Run stage 15 first.")
-        print("\n❌ Error: Timeline not found. Run 15_timeline_constructor.py first!")
+        logger.error(f"Timeline not found: {timeline_path}")
+        logger.error("Run stage 15 first.")
+        print(f"\n❌ Error: Timeline not found at {timeline_path}")
+        print(f"Run: python 15_timeline_constructor.py --input {args.input} --genre {args.genre}")
         sys.exit(1)
     
     with open(timeline_path, 'r') as f:

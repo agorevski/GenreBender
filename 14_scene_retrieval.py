@@ -21,7 +21,9 @@ from pipeline_common import (
     setup_logging,
     load_config,
     get_output_base_dir,
-    sanitize_filename
+    get_genre_output_dir,
+    sanitize_filename,
+    get_story_graph_dir
 )
 from trailer_generator.checkpoint import CheckpointManager
 from trailer_generator.retrieval.scene_retriever import retrieve_scenes
@@ -73,21 +75,21 @@ def parse_args():
     
     return parser.parse_args()
 
-def validate_inputs(args, output_dir: Path) -> tuple:
+def validate_inputs(args, output_dir: Path, genre_output_dir: Path) -> tuple:
     """
     Validate required input files exist.
     
     Returns:
         Tuple of (embeddings_dir, beats_path, shot_metadata_path)
     """
-    # Check embeddings (from stage 13)
-    embeddings_dir = output_dir / 'embeddings'
+    # Check embeddings (from stage 13) - now in genre-specific directory
+    embeddings_dir = genre_output_dir / 'embeddings'
     scene_emb = embeddings_dir / 'scene_embeddings.pkl'
     beat_emb = embeddings_dir / 'beat_embeddings.pkl'
     
     if not scene_emb.exists() or not beat_emb.exists():
         logger.error(f"Embeddings not found in {embeddings_dir}")
-        logger.error("Please run stage 13 first")
+        logger.error(f"Please run stage 13 first: python 13_embedding_generator.py --input {args.input} --genre {args.genre}")
         sys.exit(1)
     
     # Check shot metadata
@@ -97,13 +99,14 @@ def validate_inputs(args, output_dir: Path) -> tuple:
         logger.error("Please run stages 1-5 first")
         sys.exit(1)
     
-    # Determine movie name
+    # Determine movie name (use input filename if not provided)
     movie_name = args.movie_name
     if not movie_name:
-        movie_name = sanitize_filename(Path(args.input).stem)
+        movie_name = Path(args.input).stem
     
     # Check beat sheet (genre-specific file)
-    story_graph_dir = Path('outputs') / 'story_graphs' / movie_name
+    # Use get_story_graph_dir() to ensure proper sanitization (e.g., "Role Models" -> "Role_Models")
+    story_graph_dir = get_story_graph_dir(movie_name)
     beats_path = story_graph_dir / f'beats_{args.genre}.json'
     
     if not beats_path.exists():
@@ -130,6 +133,10 @@ def main():
     log_level = 'DEBUG' if args.verbose else 'INFO'
     setup_logging(log_file, level=log_level)
     
+    # Get genre-specific output directory
+    genre_output_dir = get_genre_output_dir(args.input, args.genre)
+    genre_output_dir.mkdir(parents=True, exist_ok=True)
+    
     logger.info("="*60)
     logger.info(f"Stage 14: Scene Retrieval (Layer 2.3)")
     logger.info("="*60)
@@ -137,6 +144,7 @@ def main():
     logger.info(f"Target Genre: {args.genre}")
     logger.info(f"Top-K: {args.top_k}")
     logger.info(f"Output: {output_dir}")
+    logger.info(f"Genre Output: {genre_output_dir}")
     
     # Check if already completed for this genre
     checkpoint = CheckpointManager(output_dir / 'checkpoint.json')
@@ -145,7 +153,7 @@ def main():
         return 0
     
     # Validate inputs
-    embeddings_dir, beats_path, shot_metadata_path = validate_inputs(args, output_dir)
+    embeddings_dir, beats_path, shot_metadata_path = validate_inputs(args, output_dir, genre_output_dir)
     
     # Load configuration
     config = load_config()
@@ -163,7 +171,8 @@ def main():
     logger.info("Retrieving scenes for beats...")
     logger.info(f"Scoring weights: {scoring_weights}")
     
-    output_path = output_dir / 'output' / 'selected_scenes.json'
+    # Use genre-specific output path
+    output_path = genre_output_dir / 'selected_scenes.json'
     
     try:
         results = retrieve_scenes(
