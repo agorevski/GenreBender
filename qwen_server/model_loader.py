@@ -2,6 +2,7 @@
 Model loader for Qwen VL models (Qwen2-VL, Qwen2.5-VL, Qwen3-VL).
 Handles downloading, caching, and initialization of vision-language models.
 Supports automatic detection of model family from model name.
+Supports quantization: int8, int4 (nf4/fp4) via bitsandbytes.
 """
 
 import os
@@ -12,6 +13,16 @@ from typing import Optional, Tuple, Union, Any
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Quantization support detection
+BITSANDBYTES_AVAILABLE = False
+try:
+    import bitsandbytes as bnb
+    from transformers import BitsAndBytesConfig
+    BITSANDBYTES_AVAILABLE = True
+    logger.info("bitsandbytes is available for quantization")
+except ImportError:
+    logger.warning("bitsandbytes not installed. INT8/INT4 quantization will not be available.")
 
 # Model family constants
 MODEL_FAMILY_QWEN2_VL = "qwen2_vl"
@@ -107,11 +118,32 @@ def get_processor_class(model_family: str):
     return AutoProcessor
 
 
+def check_gpu_compute_capability(min_capability: float = 7.0) -> Tuple[bool, float]:
+    """
+    Check if GPU supports the minimum compute capability.
+    
+    Args:
+        min_capability: Minimum required compute capability
+        
+    Returns:
+        Tuple of (is_supported, actual_capability)
+    """
+    if not torch.cuda.is_available():
+        return False, 0.0
+    
+    # Get compute capability of primary GPU
+    major, minor = torch.cuda.get_device_capability(0)
+    capability = float(f"{major}.{minor}")
+    
+    return capability >= min_capability, capability
+
+
 class ModelLoader:
     """
     Manages loading and initialization of Qwen VL models.
     Supports automatic downloading from HuggingFace Hub.
     Handles Qwen2-VL, Qwen2.5-VL, and Qwen3-VL model families.
+    Supports INT8 and INT4 quantization via bitsandbytes.
     """
     
     def __init__(self, config: dict):
@@ -126,6 +158,12 @@ class ModelLoader:
         self.dtype = config['model']['dtype']
         self.cache_dir = os.path.expanduser(config['model']['cache_dir'])
         self.max_length = config['model'].get('max_length', 512)
+        
+        # Quantization configuration
+        self.quantization_config = config['model'].get('quantization', {})
+        self.quant_type = self.quantization_config.get('quant_type', 'nf4')
+        self.double_quant = self.quantization_config.get('double_quant', True)
+        self.compute_dtype_str = self.quantization_config.get('compute_dtype', 'float16')
         
         # Model family detection
         configured_family = config['model'].get('model_family', MODEL_FAMILY_AUTO)
@@ -142,8 +180,84 @@ class ModelLoader:
         self.model = None
         self.processor = None
         
+        # Determine if using quantization
+        self.use_quantization = self.dtype in ['int8', 'int4']
+        
         # Convert dtype string to torch dtype
-        self.torch_dtype = torch.float16 if self.dtype == "float16" else torch.float32
+        self._setup_dtype()
+    
+    def _setup_dtype(self):
+        """Set up torch dtype based on configuration."""
+        dtype_map = {
+            'float32': torch.float32,
+            'float16': torch.float16,
+            'bfloat16': torch.bfloat16,
+            'int8': torch.float16,  # Compute dtype for int8
+            'int4': torch.float16,  # Compute dtype for int4
+        }
+        
+        if self.dtype in ['int8', 'int4']:
+            # For quantized models, use the compute dtype
+            compute_dtype_map = {
+                'float16': torch.float16,
+                'bfloat16': torch.bfloat16,
+            }
+            self.torch_dtype = compute_dtype_map.get(self.compute_dtype_str, torch.float16)
+            logger.info(f"Quantization enabled: {self.dtype} with compute dtype {self.compute_dtype_str}")
+        else:
+            self.torch_dtype = dtype_map.get(self.dtype, torch.float16)
+    
+    def _get_quantization_config(self):
+        """
+        Create BitsAndBytesConfig for quantization.
+        
+        Returns:
+            BitsAndBytesConfig or None if quantization not enabled/available
+        """
+        if not self.use_quantization:
+            return None
+        
+        if not BITSANDBYTES_AVAILABLE:
+            logger.error("bitsandbytes not installed. Cannot use INT8/INT4 quantization.")
+            logger.error("Install with: pip install bitsandbytes>=0.41.0")
+            raise ImportError("bitsandbytes is required for INT8/INT4 quantization")
+        
+        # Check GPU compute capability
+        is_supported, capability = check_gpu_compute_capability(7.0)
+        if not is_supported:
+            raise RuntimeError(
+                f"GPU compute capability {capability} is too low for quantization. "
+                f"Minimum required: 7.0 (Volta or newer)"
+            )
+        
+        logger.info(f"GPU compute capability: {capability}")
+        
+        # Check for FP8 (not supported on compute < 8.9)
+        if self.dtype == 'fp8':
+            if capability < 8.9:
+                raise RuntimeError(
+                    f"FP8 requires compute capability 8.9+ (Ada Lovelace/Hopper). "
+                    f"Your GPU has {capability}. Use int8 or int4 instead."
+                )
+        
+        from transformers import BitsAndBytesConfig
+        
+        if self.dtype == 'int8':
+            logger.info("Creating INT8 quantization config (LLM.int8())")
+            return BitsAndBytesConfig(
+                load_in_8bit=True,
+                llm_int8_threshold=6.0,  # Default threshold for outlier detection
+            )
+        elif self.dtype == 'int4':
+            logger.info(f"Creating INT4 quantization config (quant_type={self.quant_type}, double_quant={self.double_quant})")
+            return BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type=self.quant_type,  # 'nf4' or 'fp4'
+                bnb_4bit_use_double_quant=self.double_quant,
+                bnb_4bit_compute_dtype=self.torch_dtype,
+            )
+        
+        return None
     
     def load_model(self) -> Tuple[Any, Any]:
         """
@@ -186,10 +300,28 @@ class ModelLoader:
                 trust_remote_code=True
             )
             
+            # Get quantization config if enabled
+            quantization_config = self._get_quantization_config()
+            
             # Load model with appropriate parallelism strategy
             logger.info("Loading model (this may take a few minutes on first run)...")
             
-            if self.use_data_parallel and self.device == "cuda" and torch.cuda.device_count() > 1:
+            # Note: Quantized models cannot be used with DataParallel
+            if self.use_quantization:
+                if self.use_data_parallel:
+                    logger.warning("DataParallel is not compatible with quantized models. Using device_map='auto' instead.")
+                
+                logger.info(f"Loading quantized model ({self.dtype})...")
+                self.model = ModelClass.from_pretrained(
+                    self.model_name,
+                    cache_dir=self.cache_dir,
+                    quantization_config=quantization_config,
+                    device_map="auto",
+                    trust_remote_code=True
+                )
+                logger.info(f"Model loaded with {self.dtype} quantization")
+                
+            elif self.use_data_parallel and self.device == "cuda" and torch.cuda.device_count() > 1:
                 # Data Parallel mode: Load on single GPU, then wrap with DataParallel
                 logger.info(f"Using DataParallel mode across {torch.cuda.device_count()} GPUs")
                 
@@ -303,13 +435,26 @@ class ModelLoader:
             "model_family": self.model_family,
             "device": str(next(self.model.parameters()).device),
             "dtype": str(next(self.model.parameters()).dtype),
+            "config_dtype": self.dtype,
             "parameters": sum(p.numel() for p in self.model.parameters()),
+            "quantization_enabled": self.use_quantization,
         }
+        
+        # Add quantization details if enabled
+        if self.use_quantization:
+            info["quantization_bits"] = 8 if self.dtype == 'int8' else 4
+            info["quantization_type"] = self.quant_type if self.dtype == 'int4' else 'llm_int8'
+            info["double_quantization"] = self.double_quant if self.dtype == 'int4' else False
+            info["compute_dtype"] = self.compute_dtype_str
         
         if torch.cuda.is_available():
             info["gpu_count"] = torch.cuda.device_count()
             info["gpu_memory_allocated"] = torch.cuda.memory_allocated() / 1e9
             info["gpu_memory_cached"] = torch.cuda.memory_reserved() / 1e9
+            
+            # Get compute capability
+            major, minor = torch.cuda.get_device_capability(0)
+            info["gpu_compute_capability"] = f"{major}.{minor}"
         
         return info
 

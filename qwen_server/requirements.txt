@@ -7,6 +7,11 @@ transformers>=4.51.0  # Required for Qwen3-VL support (Qwen3VLForConditionalGene
 accelerate>=0.25.0
 Pillow>=10.0.0
 
+# Quantization support (INT8/INT4)
+# bitsandbytes enables LLM.int8() and NF4/FP4 quantization
+# Requires CUDA and compute capability >= 7.0 (Volta or newer)
+bitsandbytes>=0.41.0
+
 # Model specific
 qwen-vl-utils>=0.0.1  # Qwen VL utilities
 einops>=0.7.0
