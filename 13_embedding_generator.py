@@ -35,7 +35,10 @@ def parse_args():
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Stage 13: Generate embeddings for semantic scene retrieval")
     parser.add_argument('--input', type=str, required=True, help='Input video file path')
-    parser.add_argument('--genre', type=str, required=True, choices=['thriller', 'action', 'drama', 'horror', 'scifi', 'comedy', 'romance'], help='Target trailer genre')
+    parser.add_argument('--genre', type=str, required=True, 
+                       choices=['comedy', 'horror', 'thriller', 'parody', 'mockumentary', 
+                                'crime', 'drama', 'experimental', 'fantasy', 'romance', 'scifi', 'action'], 
+                       help='Target trailer genre')
     parser.add_argument('--movie-name', type=str, help='Movie name (for story graph lookup, defaults to input filename)')
     parser.add_argument('--force', action='store_true', help='Force regeneration even if embeddings exist')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
@@ -63,9 +66,9 @@ def validate_inputs(args, output_dir: Path) -> tuple:
         from pipeline_common import sanitize_filename
         movie_name = sanitize_filename(Path(args.input).stem)
     
-    # Check beat sheet (from stage 12)
+    # Check beat sheet (from stage 12) - genre-specific file
     story_graph_dir = Path('outputs') / 'story_graphs' / movie_name
-    beats_path = story_graph_dir / 'beats.json'
+    beats_path = story_graph_dir / f'beats_{args.genre}.json'
     
     if not beats_path.exists():
         logger.error(f"Beat sheet not found: {beats_path}")
@@ -92,15 +95,15 @@ def main():
     """Main execution function."""
     args = parse_args()
     
-    # Initialize stage with checkpoint
+    # Initialize stage with checkpoint (genre-dependent stage)
     output_base, dirs, checkpoint, logger = initialize_stage(
         STAGE_NAME, 
         args.input, 
         args.genre
     )
     
-    # Check if already completed
-    if not args.force and checkpoint.is_stage_completed(STAGE_NAME):
+    # Check if already completed for this genre
+    if not args.force and checkpoint.is_stage_completed(STAGE_NAME, args.genre):
         logger.info(f"Stage '{STAGE_NAME}' already completed. Use --force to regenerate.")
         print_completion_message(STAGE_NAME, checkpoint, output_base)
         return 0
@@ -140,12 +143,12 @@ def main():
         logger.info(f"  Scene embeddings: {scene_emb_path}")
         logger.info(f"  Beat embeddings: {beat_emb_path}")
         
-        # Mark stage as complete
+        # Mark stage as complete for this genre
         checkpoint.mark_stage_completed(STAGE_NAME, {
             'scene_embeddings': str(scene_emb_path),
             'beat_embeddings': str(beat_emb_path),
             'target_genre': args.genre
-        })
+        }, genre=args.genre)
         
         # Print completion message
         print_completion_message(STAGE_NAME, checkpoint, output_base)

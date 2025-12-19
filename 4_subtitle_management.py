@@ -10,13 +10,14 @@ from pathlib import Path
 
 from pipeline_common import (
     initialize_stage, print_completion_message, add_common_arguments,
-    load_config, load_shots_from_metadata, save_shots_to_metadata
+    load_config
 )
+from trailer_generator.checkpoint import load_shots_from_metadata, save_shots_to_metadata
 from trailer_generator.ingest import SubtitleExtractor
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Stage 3.5: Subtitle Management - Extract and map subtitles to shots'
+        description='Stage 4: Subtitle Management - Extract and map subtitles to shots (genre-agnostic)'
     )
     add_common_arguments(parser)
     parser.add_argument('--srt-file', type=str, default=None,
@@ -25,9 +26,9 @@ def main():
                        help='Skip subtitle processing (continue without subtitles)')
     args = parser.parse_args()
     
-    # Initialize
+    # Initialize (genre-agnostic stage)
     output_base, dirs, checkpoint, logger = initialize_stage(
-        'subtitle_management', args.input, args.genre
+        'subtitle_management', args.input
     )
     
     # Validate prerequisites

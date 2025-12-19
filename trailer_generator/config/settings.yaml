@@ -49,12 +49,12 @@ remote_analysis:
   api_key: "helloagorevski"                    # API key for qwen_server authentication
   
   # Request settings
-  timeout: 60
-  max_retries: 3
-  batch_size: 16
-  cache_enabled: true
-  cache_path: "cache/"
-  min_shot_duration: 2.0                       # Minimum shot duration (seconds) for analysis
+  timeout: 60                                  # Timeout before retrying the remote analysis request (seconds)
+  max_retries: 3                               # Maximum number of retries for failed requests
+  batch_size: 16                               # Number of shots to analyze per request
+  cache_enabled: true                          # Enable local caching of analysis results
+  cache_path: "cache/"                         # Path to cache directory
+  min_shot_duration: 4.0                       # Minimum shot duration (seconds) for analysis
   
   # Multi-server settings (when server_count > 1)
   load_balancing: "round_robin"                # Options: round_robin, random (round_robin recommended for even distribution)

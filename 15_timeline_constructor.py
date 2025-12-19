@@ -45,7 +45,8 @@ def parse_args():
         '--genre',
         type=str,
         required=True,
-        choices=['thriller', 'action', 'drama', 'horror', 'scifi', 'comedy', 'romance'],
+        choices=['comedy', 'horror', 'thriller', 'parody', 'mockumentary', 
+                 'crime', 'drama', 'experimental', 'fantasy', 'romance', 'scifi', 'action'],
         help='Target trailer genre'
     )
     parser.add_argument(
@@ -107,10 +108,10 @@ def main():
     logger.info(f"Target Duration: {args.target_duration}s")
     logger.info(f"Output: {output_dir}")
     
-    # Check if already completed
+    # Check if already completed for this genre
     checkpoint = CheckpointManager(output_dir / 'checkpoint.json')
-    if not args.force and checkpoint.is_stage_completed(STAGE_NAME):
-        logger.info(f"Stage '{STAGE_NAME}' already completed. Use --force to reconstruct.")
+    if not args.force and checkpoint.is_stage_completed(STAGE_NAME, args.genre):
+        logger.info(f"Stage '{STAGE_NAME}' already completed for genre '{args.genre}'. Use --force to reconstruct.")
         return 0
     
     # Validate inputs
@@ -144,7 +145,7 @@ def main():
         logger.info(f"  Shots per minute: {pacing['shots_per_minute']:.1f}")
         logger.info(f"  Output: {output_path}")
         
-        # Update checkpoint
+        # Update checkpoint for this genre
         checkpoint.mark_stage_completed(STAGE_NAME, {
             'timeline': str(output_path),
             'genre': args.genre,
@@ -152,7 +153,7 @@ def main():
             'actual_duration': actual_duration,
             'total_shots': total_shots,
             'pacing_profile': pacing
-        })
+        }, genre=args.genre)
         
         return 0
         

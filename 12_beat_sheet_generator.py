@@ -14,8 +14,8 @@ Input:
     - target genre selection
 
 Output:
-    - beats.json: Complete beat sheet with embedding prompts
-    - genre_rewrite.json: Intermediate genre reinterpretation
+    - beats_{genre}.json: Complete beat sheet with embedding prompts (per genre)
+    - genre_rewrite_{genre}.json: Intermediate genre reinterpretation (per genre)
     - metadata_beats.json: Generation metadata
 """
 
@@ -56,7 +56,8 @@ Examples:
   python 12_beat_sheet_generator.py --movie-name "Movie" --genre action --output-dir custom/
 
 Available Genres:
-  thriller, action, drama, horror, scifi, comedy, romance
+  comedy, horror, thriller, parody, mockumentary, crime, drama,
+  experimental, fantasy, romance, scifi, action
         """
     )
     
@@ -71,7 +72,8 @@ Available Genres:
         '--genre',
         type=str,
         required=True,
-        choices=['thriller', 'action', 'drama', 'horror', 'scifi', 'comedy', 'romance'],
+        choices=['comedy', 'horror', 'thriller', 'parody', 'mockumentary', 
+                 'crime', 'drama', 'experimental', 'fantasy', 'romance', 'scifi', 'action'],
         help='Target genre for trailer'
     )
     
@@ -174,12 +176,12 @@ def main():
             print("\n✓ Validation passed")
             return 0
         
-        # Check if output already exists
-        beats_path = output_dir / "beats.json"
+        # Check if output already exists (genre-specific)
+        beats_path = output_dir / f"beats_{args.genre}.json"
         if beats_path.exists() and not args.force:
-            logger.info(f"Beat sheet already exists: {beats_path}")
+            logger.info(f"Beat sheet already exists for genre '{args.genre}': {beats_path}")
             logger.info("Use --force to regenerate")
-            print(f"\n✓ Beat sheet already exists: {beats_path}")
+            print(f"\n✓ Beat sheet already exists for '{args.genre}': {beats_path}")
             print("Use --force to regenerate")
             return 0
         
@@ -217,22 +219,23 @@ def main():
             max_beats=beat_sheet_config.get('max_beats')
         )
         
-        # Generate beat sheet
+        # Generate beat sheet (save genre_rewrite with genre-specific name)
         logger.info("Starting beat sheet generation...")
         start_time = datetime.now()
         
         result = generator.generate_beat_sheet(
             story_graph=story_graph,
             target_genre=args.genre,
-            output_dir=output_dir
+            output_dir=output_dir,
+            genre_rewrite_filename=f"genre_rewrite_{args.genre}.json"
         )
         
         duration = (datetime.now() - start_time).total_seconds()
         logger.info(f"Beat sheet generation completed in {duration:.1f} seconds")
         
-        # Save beat sheet
+        # Save beat sheet (genre-specific filename)
         beat_sheet = result['beat_sheet']
-        beats_path = output_dir / "beats.json"
+        beats_path = output_dir / f"beats_{args.genre}.json"
         generator.save_beat_sheet(beat_sheet, beats_path)
         
         # Save metadata
@@ -262,8 +265,8 @@ def main():
         print(f"Beat Count: {len(beat_sheet.get('beats', []))}")
         print(f"Duration: {duration:.1f}s")
         print(f"\nOutputs:")
-        print(f"  ✓ beats.json: {beats_path}")
-        print(f"  ✓ genre_rewrite.json: {output_dir / 'genre_rewrite.json'}")
+        print(f"  ✓ beats_{args.genre}.json: {beats_path}")
+        print(f"  ✓ genre_rewrite_{args.genre}.json: {output_dir / f'genre_rewrite_{args.genre}.json'}")
         print(f"  ✓ metadata: {metadata_path}")
         print(f"  ✓ logs: {log_file}")
         print("\nNext step:")

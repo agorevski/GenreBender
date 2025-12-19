@@ -1,6 +1,14 @@
 # GenreBender Pipeline Configuration
-# Usage: ./run_semantic_pipeline.sh <key>
-# Example: ./run_semantic_pipeline.sh hitch
+# Usage: python run_multi_genre_pipeline.py <key>
+# Example: python run_multi_genre_pipeline.py hitch
+
+# Global settings for multi-genre processing
+settings:
+  parallel_workers: 4  # Number of genres to process in parallel
+
+# Available genres (for reference):
+# comedy, horror, thriller, parody, mockumentary, crime, drama, 
+# experimental, fantasy, romance, scifi, action
 
 movies:
   hitch:
@@ -8,4 +16,34 @@ movies:
     video: "./test_files/hitch.mp4"
     subtitles: "./test_files/hitch.srt"
     synopsis: "./test_files/hitch_synopsis.txt"
-    genre: "thriller"
+    genres:  # List of genres to generate trailers for
+      - comedy
+      - thriller
+      - horror
+      - romance
+      - drama
+      - parody
+  rolemodels:
+    movie_name: "Role Models"
+    video: "./test_files/rolemodels.mp4"
+    subtitles: "./test_files/rolemodels.srt"
+    synopsis: "./test_files/rolemodels_synopsis.txt"
+    genres:
+      - comedy
+      - thriller
+      - horror
+      - romance
+      - drama
+      - parody
+  pulpfiction:
+    movie_name: "Pulp Fiction"
+    video: "./test_files/pulpfiction.mp4"
+    subtitles: "./test_files/pulpfiction.srt"
+    synopsis: "./test_files/pulpfiction_synopsis.txt"
+    genres:
+      - comedy
+      - thriller
+      - horror
+      - romance
+      - drama
+      - parody

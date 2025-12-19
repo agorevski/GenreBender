@@ -162,7 +162,8 @@ Requirements:
         self,
         story_graph: Dict,
         target_genre: str,
-        output_dir: Optional[Path] = None
+        output_dir: Optional[Path] = None,
+        genre_rewrite_filename: Optional[str] = None
     ) -> Dict:
         """
         Generate complete beat sheet from story graph.
@@ -171,6 +172,8 @@ Requirements:
             story_graph: Story graph dictionary from Stage 11
             target_genre: Target genre for trailer
             output_dir: Optional directory to save intermediate outputs
+            genre_rewrite_filename: Optional filename for genre_rewrite output 
+                                   (default: genre_rewrite.json, use genre_rewrite_{genre}.json for multi-genre)
         
         Returns:
             Dictionary with 'beats' and 'embeddings' (placeholder for now)
@@ -193,9 +196,10 @@ Requirements:
         logger.info("Stage 1: Genre Reinterpretation...")
         genre_rewrite = self._stage1_genre_reinterpretation(story_graph, target_genre)
         
-        # Save intermediate output
+        # Save intermediate output (with genre-specific filename if provided)
         if output_dir:
-            rewrite_path = output_dir / "genre_rewrite.json"
+            rewrite_filename = genre_rewrite_filename or "genre_rewrite.json"
+            rewrite_path = output_dir / rewrite_filename
             with open(rewrite_path, 'w') as f:
                 json.dump(genre_rewrite, f, indent=2)
             logger.info(f"Saved genre rewrite to: {rewrite_path}")

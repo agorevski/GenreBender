@@ -14,8 +14,7 @@ GenreBender is a sophisticated system for automatically generating cinematic tra
 ## Project Structure
 ```
 GenreBender/
-├── main.py                           # Main pipeline orchestrator & CLI
-├── run_semantic_pipeline.sh          # Semantic pipeline orchestrator script
+├── run_multi_genre_pipeline.py       # Multi-genre pipeline orchestrator
 ├── 1_shot_detection.py               # Stage 1 standalone script
 ├── 2_keyframe_extraction.py          # Stage 2 standalone script
 ├── 3_audio_extraction.py             # Stage 3 standalone script
@@ -113,92 +112,131 @@ GenreBender/
 - Never commit API keys or credentials to repository
 - Environment variables in `.env` take precedence over `settings.yaml` values
 
-### Pipeline Stages (10-Stage Architecture)
+### Pipeline Stages (Multi-Genre Architecture)
+
+**Genre-Agnostic Stages (run once, shared across all genres):**
 1. **shot_detection**: Identify scene boundaries using PySceneDetect
 2. **keyframe_extraction**: Extract 5 frames per shot for temporal analysis
 3. **audio_extraction**: Extract MFCC, spectral centroid, RMS energy features
 4. **subtitle_management**: Parse SRT files and map dialogue to shots
 5. **remote_analysis**: Multimodal analysis via Qwen2-VL server
+11. **story_graph_generation**: Generate semantic story graph from synopsis + subtitles
+
+**Genre-Dependent Stages (run per genre, parallelizable):**
+12. **beat_sheet_generation**: Transform story graph into genre-specific trailer beats
+13. **embedding_generation**: Generate embeddings for semantic scene retrieval
+14. **scene_retrieval**: Match beats to scenes using FAISS + multi-factor scoring
+15. **timeline_construction**: Build deterministic shot-level timeline
+9. **video_assembly**: Assemble video with genre-specific color grading and transitions
+10. **audio_mixing**: Mix music with audio ducking and normalization
+
+**Legacy Stages (deprecated, for old pipeline compatibility):**
 6. **genre_scoring**: Score shots based on genre profile weights
 7. **shot_selection**: Select top N shots (default: 60)
-8. **narrative_generation**: Generate coherent timeline with GPT-4 (enhanced with dialogue context)
-9. **video_assembly**: Assemble video with color grading and transitions
-10. **audio_mixing**: Mix music with audio ducking and normalization
+8. **narrative_generation**: Generate coherent timeline with GPT-4
 
 ## Common Workflows
 
 ### Running the Pipeline
 
-**Unified Pipeline (main.py):**
+**Multi-Genre Pipeline (recommended):**
 ```bash
-# Basic usage
-python main.py --input movie.mp4 --genre thriller
+# Generate trailers for all genres defined in config.yaml
+python run_multi_genre_pipeline.py hitch
 
-# Test mode (first 5 shots only)
-python main.py --input clip.mp4 --genre action --test
+# Specify parallel workers (default: 4)
+python run_multi_genre_pipeline.py hitch --parallel-workers 4
 
-# Resume from failed stage
-python main.py --input movie.mp4 --genre horror --resume-from remote_analysis --skip-clean
+# Skip Phase 1 if genre-agnostic stages are already complete
+python run_multi_genre_pipeline.py hitch --skip-phase1
 
-# Force re-run specific stage (e.g., after config changes)
-python main.py --input movie.mp4 --genre comedy --force-stage genre_scoring --skip-clean
+# Override genres from config.yaml
+python run_multi_genre_pipeline.py hitch --genres comedy,thriller,horror
 
-# Reset and start fresh
-python main.py --input movie.mp4 --genre thriller --reset-checkpoint
-
-# Using semantic pipeline script (requires synopsis and subtitles)
-./run_semantic_pipeline.sh movie.mp4 thriller "Movie Title" synopsis.txt movie.srt
+# Force re-run all stages
+python run_multi_genre_pipeline.py hitch --force
 ```
 
-**Stage-by-Stage Execution:**
+**Stage-by-Stage Execution (Genre-Agnostic):**
 ```bash
-# Run stages individually for more control
-python 1_shot_detection.py --input movie.mp4 --genre thriller
-python 2_keyframe_extraction.py --input movie.mp4 --genre thriller
-python 3_audio_extraction.py --input movie.mp4 --genre thriller
-python 4_subtitle_management.py --input movie.mp4 --genre thriller
-python 5_remote_analysis.py --input movie.mp4 --genre thriller
-python 6_genre_scoring.py --input movie.mp4 --genre thriller
-python 7_shot_selection.py --input movie.mp4 --genre thriller
-python 8_narrative_generation.py --input movie.mp4 --genre thriller
+# Run genre-agnostic stages (no --genre required)
+python 1_shot_detection.py --input movie.mp4
+python 2_keyframe_extraction.py --input movie.mp4
+python 3_audio_extraction.py --input movie.mp4
+python 4_subtitle_management.py --input movie.mp4 --srt-file movie.srt
+python 5_remote_analysis.py --input movie.mp4
+
+# Story graph generation (requires synopsis and subtitles)
+python 11_story_graph_generator.py --movie-name "Movie" --synopsis synopsis.txt --srt-file movie.srt
+
+# Use --force to re-run a specific stage
+python 5_remote_analysis.py --input movie.mp4 --force
+
+# Use --test for quick validation (limited shots)
+python 1_shot_detection.py --input movie.mp4 --test
+```
+
+**Stage-by-Stage Execution (Genre-Dependent):**
+```bash
+# Run genre-dependent stages (--genre required)
+python 12_beat_sheet_generator.py --movie-name "Movie" --genre thriller
+python 13_embedding_generator.py --input movie.mp4 --genre thriller --movie-name "Movie"
+python 14_scene_retrieval.py --input movie.mp4 --genre thriller --movie-name "Movie"
+python 15_timeline_constructor.py --input movie.mp4 --genre thriller
 python 9_video_assembly.py --input movie.mp4 --genre thriller
 python 10_audio_mixing.py --input movie.mp4 --genre thriller
 
-# Use --force to re-run a specific stage
-python 6_genre_scoring.py --input movie.mp4 --genre horror --force
-
-# Use --test for quick validation
-python 1_shot_detection.py --input clip.mp4 --genre action --test
+# Run same stages for different genres (can run in parallel)
+python 12_beat_sheet_generator.py --movie-name "Movie" --genre horror
+python 12_beat_sheet_generator.py --movie-name "Movie" --genre comedy
 ```
 
-### Available Genres
-- `thriller`: Suspenseful, building tension
-- `action`: Fast-paced, high energy  
-- `drama`: Emotional, character-driven
-- `horror`: Atmospheric, frightening
-- `scifi`: Futuristic, wonder-filled
+### Available Genres (12 total)
 - `comedy`: Upbeat, humorous
+- `horror`: Atmospheric, frightening
+- `thriller`: Suspenseful, building tension
+- `parody`: Over-the-top, comedic exaggeration
+- `mockumentary`: Documentary-style, deadpan humor
+- `crime`: Noir-inspired, gritty investigation
+- `drama`: Emotional, character-driven
+- `experimental`: Surrealist, unconventional
+- `fantasy`: Magical, epic adventure
 - `romance`: Warm, emotional connection
+- `scifi`: Futuristic, wonder-filled
+- `action`: Fast-paced, high energy
 
 ### Checkpoint System
 - Automatically saves progress after each stage completion
-- Validates input file and genre match before resuming
-- Use `--resume-from STAGE` to skip completed stages
-- Use `--force-stage STAGE` to re-run a specific stage (main.py)
-- Use `--force` flag to re-run standalone stage scripts
+- **Version 2.0**: Supports per-genre completion tracking for genre-dependent stages
+- Genre-agnostic stages are tracked globally (run once)
+- Genre-dependent stages are tracked per-genre (can run in parallel)
+- Use `--force` flag to re-run a specific stage
 - Use `--reset-checkpoint` to start completely fresh
-- Always use `--skip-clean` when resuming to preserve existing work
+- Checkpoint file includes:
+  - Global stage completion for genre-agnostic stages
+  - Per-genre completion tracking in `genre_stages` section
+  - Input file validation
 
 ### Output Structure
 All outputs for a video are organized in `outputs/<sanitized_filename>/`:
+
+**Shared (Genre-Agnostic) Outputs:**
 - **shots/shot_metadata.json**: Complete shot information with analysis
-- **output/timeline.json**: Narrative timeline structure
-- **output/selected_shots.json**: Top-scored shots before timeline generation
-- **output/trailer_assembled.mp4**: Stage 9 output (video without final audio)
-- **output/trailer_final.mp4**: Stage 10 output (FINAL broadcast-ready trailer)
-- **checkpoint.json**: Pipeline state for resuming
-- **trailer_generator.log**: Detailed execution logs
+- **keyframes/**: Extracted frames (5 per shot)
 - **cache/analysis_cache.json**: Cached multimodal analysis results
+- **embeddings/**: Scene and beat embeddings
+- **checkpoint.json**: Pipeline state for resuming (includes per-genre tracking)
+- **trailer_generator.log**: Detailed execution logs
+
+**Genre-Specific Outputs:**
+- **trailers/<genre>/trailer_<genre>_assembled.mp4**: Video without final audio
+- **trailers/<genre>/trailer_<genre>_final.mp4**: FINAL broadcast-ready trailer
+- **trailers/<genre>/embeddings/**: Genre-specific beat embeddings
+
+**Story Graph Outputs (in outputs/story_graphs/<movie_name>/):**
+- **story_graph.json**: Semantic story structure (shared across genres)
+- **beats_{genre}.json**: Genre-specific beat sheet (e.g., beats_thriller.json, beats_comedy.json)
+- **genre_rewrite_{genre}.json**: Genre reinterpretation (e.g., genre_rewrite_thriller.json)
 
 ## External Dependencies
 
@@ -482,12 +520,14 @@ Standalone utility for generating comprehensive semantic story graphs from movie
 
 **Output Structure:**
 ```
-outputs/story_graphs/<sanitized_movie_name>/
-├── story_graph.json          # Main output
-├── input_synopsis.txt        # Saved synopsis
-├── input_subtitles.srt       # Copy of SRT
-├── metadata.json             # Generation metadata
-└── story_graph_generator.log # Detailed logs
+outputs/story_graphs/<movie_name>/
+├── story_graph.json              # Main output (shared)
+├── beats_{genre}.json            # Per-genre beat sheets
+├── genre_rewrite_{genre}.json    # Per-genre reinterpretations
+├── input_synopsis.txt            # Saved synopsis
+├── input_subtitles.srt           # Copy of SRT
+├── metadata.json                 # Generation metadata
+└── story_graph_generator.log     # Detailed logs
 ```
 
 **Usage Examples:**
@@ -575,12 +615,13 @@ python 11_story_graph_generator.py \
 - `utilities/subtitle_parser.py` - Subtitle parsing
 - `trailer_generator/narrative/azure_client.py` - GPT-4 integration
 
-## Shell Scripts
+## Scripts
 
-### Semantic Pipeline
-- **run_semantic_pipeline.sh**: Full semantic pipeline orchestrator (Stages 1-5 → 11-12 → 13-15 → 9-10)
-  - Requires: video, genre, movie name, synopsis file, subtitle file
-  - Usage: `./run_semantic_pipeline.sh movie.mp4 thriller "Movie Title" synopsis.txt movie.srt`
+### Multi-Genre Pipeline
+- **run_multi_genre_pipeline.py**: Full multi-genre pipeline orchestrator
+  - Phase 1: Genre-agnostic stages (1-5, 11) run sequentially
+  - Phase 2: Genre-dependent stages (12-15, 9-10) run in parallel per genre
+  - Usage: `python run_multi_genre_pipeline.py hitch --parallel-workers 4`
 
 ### Qwen Server Management
 - **qwen_server/setup.sh**: First-time setup (venv, dependencies, model download)
@@ -599,11 +640,16 @@ cd qwen_server && ./setup.sh
 ./stop_server.sh
 ```
 
-**Semantic Pipeline Usage:**
+**Multi-Genre Pipeline Usage:**
 ```bash
-# Run complete semantic trailer generation
-./run_semantic_pipeline.sh test_files/hitch.mp4 thriller "Hitch" \
-  test_files/hitch_synopsis.txt test_files/hitch.srt
+# Run complete multi-genre trailer generation
+python run_multi_genre_pipeline.py hitch
+
+# With custom parallel workers
+python run_multi_genre_pipeline.py hitch --parallel-workers 4
+
+# Skip Phase 1 if already complete
+python run_multi_genre_pipeline.py hitch --skip-phase1
 ```
 
 ## Beat Sheet Generator - Stage 12 / Layer 2.2 (`12_beat_sheet_generator.py`)
@@ -617,11 +663,11 @@ Transforms story graphs into genre-specific trailer beat sheets through two-stag
 **Output Structure:**
 ```
 outputs/story_graphs/<movie_name>/
-├── story_graph.json          # Stage 11 input
-├── genre_rewrite.json        # Stage 1 output (intermediate)
-├── beats.json                # Stage 2 output (final)
-├── metadata_beats.json       # Generation metadata
-└── beat_sheet_generator.log  # Detailed logs
+├── story_graph.json                  # Stage 11 input (shared)
+├── beats_{genre}.json                # Stage 2 output (per genre, e.g., beats_thriller.json)
+├── genre_rewrite_{genre}.json        # Stage 1 output (per genre, e.g., genre_rewrite_thriller.json)
+├── metadata_beats.json               # Generation metadata
+└── beat_sheet_generator.log          # Detailed logs
 ```
 
 **Usage Examples:**
@@ -710,8 +756,8 @@ beat_sheet:
 ```
 Stage 11: Story Graph → Stage 12: Beat Sheet → Layer 2.3: Scene Retrieval
                          ↓
-                   genre_rewrite.json (intermediate)
-                   beats.json (with embedding prompts)
+                   genre_rewrite_{genre}.json (intermediate, per genre)
+                   beats_{genre}.json (with embedding prompts, per genre)
                          ↓
                    [Future: Semantic scene matching with embeddings]
 ```

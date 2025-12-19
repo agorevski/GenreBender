@@ -1,10 +1,23 @@
 # Genre-specific profiles for trailer generation
+# Total: 27 genres (12 original + 8 major traditional + 7 emerging/modern)
+#
+# CONSOLIDATED ATTRIBUTES (38 total):
+# suspense, ambiguity, emotional_intensity, darkness, intensity, motion, impact,
+# fear, futuristic, technology, wonder, scale, humor, lightheartedness, timing,
+# intimacy, warmth, beauty, absurdity, authenticity, awkwardness, deadpan,
+# mystery, surrealism, visual_abstraction, unconventional, magic, adventure,
+# landscape, ruggedness, sacrifice, patriotism, rhythm, performance, triumph,
+# rebellion, decay, romantic_tension
+
+# ============================================
+# ORIGINAL GENRES (12)
+# ============================================
 
 thriller:
   scoring_weights:
     suspense: 0.35
     ambiguity: 0.25
-    emotional_tension: 0.20
+    emotional_intensity: 0.20
     darkness: 0.20
   
   color_grade:
@@ -36,10 +49,9 @@ thriller:
 
 action:
   scoring_weights:
-    intensity: 0.40
+    intensity: 0.50
     motion: 0.30
     impact: 0.20
-    energy: 0.10
   
   color_grade:
     filter: "eq=contrast=1.3:saturation=1.2:brightness=0.05,unsharp=5:5:1.0"
@@ -70,7 +82,7 @@ action:
 
 drama:
   scoring_weights:
-    emotional_connection: 0.50
+    emotional_intensity: 0.50
     intimacy: 0.30
     warmth: 0.20
   
@@ -103,10 +115,9 @@ drama:
 
 horror:
   scoring_weights:
-    fear: 0.40
+    fear: 0.60
     darkness: 0.30
-    unease: 0.20
-    shock: 0.10
+    impact: 0.10
   
   color_grade:
     filter: "eq=contrast=1.4:brightness=-0.10:saturation=0.6,colortemperature=3000"
@@ -172,7 +183,7 @@ scifi:
 comedy:
   scoring_weights:
     humor: 0.40
-    energy: 0.30
+    intensity: 0.30
     lightheartedness: 0.20
     timing: 0.10
   
@@ -205,7 +216,7 @@ comedy:
 
 romance:
   scoring_weights:
-    emotional_connection: 0.40
+    emotional_intensity: 0.40
     intimacy: 0.30
     warmth: 0.20
     beauty: 0.10
@@ -236,3 +247,680 @@ romance:
     color: "white"
     shadow: false
     animation: "elegant_fade"
+
+parody:
+  scoring_weights:
+    humor: 0.35
+    absurdity: 0.50
+    timing: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.1:saturation=1.3:brightness=0.08"
+    description: "Over-saturated, slightly exaggerated colors"
+  
+  music_tags:
+    - comedic
+    - dramatic_parody
+    - over_the_top
+    - playful
+  
+  music_generation:
+    instruments:
+      intro: ["dramatic orchestra parody", "comedic timpani"]
+      build: ["exaggerated brass", "silly percussion", "mock-epic strings"]
+      climax: ["full orchestra spoof", "comedic hits", "over-the-top brass"]
+      outro: ["deflating trombone", "comedic resolution"]
+    mood_descriptors: ["absurd", "over-the-top", "comedic", "exaggerated"]
+    tempo_range: [100, 140]
+  
+  pacing: "exaggerated_dramatic"
+  
+  text_overlay_style:
+    font: "Impact"
+    color: "yellow"
+    shadow: true
+    animation: "dramatic_zoom"
+
+mockumentary:
+  scoring_weights:
+    authenticity: 0.35
+    awkwardness: 0.25
+    deadpan: 0.25
+    absurdity: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.0:saturation=0.95:brightness=0.02,noise=alls=5:allf=t"
+    description: "Documentary-style, slightly desaturated with subtle grain"
+  
+  music_tags:
+    - documentary
+    - understated
+    - quirky
+    - ambient
+  
+  music_generation:
+    instruments:
+      intro: ["simple guitar", "ambient room tone"]
+      build: ["light strings", "subtle piano", "documentary underscore"]
+      climax: ["building strings", "emotional piano", "documentary swell"]
+      outro: ["fading ambient", "quiet resolution"]
+    mood_descriptors: ["authentic", "understated", "quirky", "observational"]
+    tempo_range: [80, 110]
+  
+  pacing: "interview_style"
+  
+  text_overlay_style:
+    font: "Helvetica Neue"
+    color: "white"
+    shadow: false
+    animation: "simple_fade"
+
+crime:
+  scoring_weights:
+    suspense: 0.35
+    mystery: 0.25
+    darkness: 0.25
+    intensity: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.3:saturation=0.7:brightness=-0.08,curves=all='0/0 0.3/0.2 0.7/0.75 1/1'"
+    description: "Noir-inspired, high contrast with crushed blacks"
+  
+  music_tags:
+    - noir
+    - suspenseful
+    - urban
+    - detective
+  
+  music_generation:
+    instruments:
+      intro: ["jazz bass", "muted trumpet", "brushed drums"]
+      build: ["tense strings", "jazz piano", "building percussion"]
+      climax: ["full jazz orchestra", "dramatic brass", "intense drums"]
+      outro: ["solo saxophone", "fading piano"]
+    mood_descriptors: ["noir", "gritty", "mysterious", "urban"]
+    tempo_range: [70, 100]
+  
+  pacing: "investigative"
+  
+  text_overlay_style:
+    font: "Courier New"
+    color: "white"
+    shadow: true
+    animation: "typewriter"
+
+experimental:
+  scoring_weights:
+    surrealism: 0.60
+    visual_abstraction: 0.25
+    unconventional: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.5:saturation=1.4,hue=h=15,curves=all='0/0.1 0.5/0.4 1/0.9'"
+    description: "Surrealist, shifted hues, high contrast"
+  
+  music_tags:
+    - avant_garde
+    - dissonant
+    - electronic
+    - ambient
+  
+  music_generation:
+    instruments:
+      intro: ["atonal textures", "found sounds", "electronic glitches"]
+      build: ["deconstructed orchestra", "granular synthesis", "abstract percussion"]
+      climax: ["noise crescendo", "distorted elements", "chaotic layers"]
+      outro: ["fading static", "silence fragments"]
+    mood_descriptors: ["surreal", "disorienting", "abstract", "unconventional"]
+    tempo_range: [40, 180]
+  
+  pacing: "non_linear"
+  
+  text_overlay_style:
+    font: "Futura"
+    color: "magenta"
+    shadow: true
+    animation: "glitch_distort"
+
+fantasy:
+  scoring_weights:
+    wonder: 0.35
+    magic: 0.25
+    scale: 0.25
+    adventure: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.15:saturation=1.25:brightness=0.03,curves=all='0/0 0.5/0.55 1/1'"
+    description: "Rich, saturated, magical tones"
+  
+  music_tags:
+    - epic
+    - orchestral
+    - magical
+    - adventure
+  
+  music_generation:
+    instruments:
+      intro: ["ethereal choir", "harp", "soft strings"]
+      build: ["full orchestra", "French horns", "building drums"]
+      climax: ["epic orchestra", "massive choir", "thundering percussion"]
+      outro: ["solo flute", "fading strings", "magical chimes"]
+    mood_descriptors: ["magical", "epic", "wondrous", "adventurous"]
+    tempo_range: [80, 130]
+  
+  pacing: "epic_journey"
+  
+  text_overlay_style:
+    font: "Trajan Pro"
+    color: "gold"
+    shadow: true
+    animation: "magical_reveal"
+
+# ============================================
+# MAJOR TRADITIONAL GENRES (8)
+# ============================================
+
+western:
+  scoring_weights:
+    landscape: 0.50
+    ruggedness: 0.25
+    suspense: 0.25
+  
+  color_grade:
+    filter: "eq=contrast=1.2:saturation=0.85:brightness=0.02,colortemperature=5000,curves=all='0/0.05 0.5/0.5 1/0.95'"
+    description: "Warm, dusty, sun-bleached tones with golden hour feel"
+  
+  music_tags:
+    - western
+    - acoustic_guitar
+    - harmonica
+    - orchestral
+  
+  music_generation:
+    instruments:
+      intro: ["solo harmonica", "acoustic guitar", "distant wind"]
+      build: ["strings", "Spanish guitar", "building percussion"]
+      climax: ["full orchestra", "epic brass", "driving drums"]
+      outro: ["harmonica", "fading strings", "acoustic guitar"]
+    mood_descriptors: ["rugged", "expansive", "lonely", "heroic"]
+    tempo_range: [70, 110]
+  
+  pacing: "deliberate_build"
+  
+  text_overlay_style:
+    font: "Playfair Display"
+    color: "tan"
+    shadow: true
+    animation: "dust_fade"
+
+war:
+  scoring_weights:
+    intensity: 0.35
+    sacrifice: 0.25
+    scale: 0.25
+    patriotism: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.35:saturation=0.6:brightness=-0.05,curves=all='0/0 0.4/0.35 1/1'"
+    description: "Desaturated, gritty, high contrast battlefield aesthetic"
+  
+  music_tags:
+    - epic
+    - military
+    - emotional
+    - orchestral
+  
+  music_generation:
+    instruments:
+      intro: ["solo trumpet", "distant drums", "ambient tension"]
+      build: ["military snare", "strings", "building brass"]
+      climax: ["full orchestra", "massive percussion", "brass fanfare"]
+      outro: ["solo bugle", "fading strings", "silence"]
+    mood_descriptors: ["heroic", "tragic", "intense", "patriotic"]
+    tempo_range: [60, 120]
+  
+  pacing: "battle_rhythm"
+  
+  text_overlay_style:
+    font: "Stencil"
+    color: "white"
+    shadow: true
+    animation: "military_cut"
+
+musical:
+  scoring_weights:
+    rhythm: 0.50
+    performance: 0.30
+    lightheartedness: 0.20
+  
+  color_grade:
+    filter: "eq=contrast=1.1:saturation=1.3:brightness=0.08,curves=all='0/0 0.5/0.55 1/1'"
+    description: "Vibrant, theatrical, stage-lit colors"
+  
+  music_tags:
+    - theatrical
+    - broadway
+    - upbeat
+    - orchestral
+  
+  music_generation:
+    instruments:
+      intro: ["piano intro", "soft strings", "building anticipation"]
+      build: ["full orchestra", "brass section", "percussion"]
+      climax: ["big band", "choir", "theatrical crescendo"]
+      outro: ["piano resolution", "strings", "final flourish"]
+    mood_descriptors: ["theatrical", "joyful", "dramatic", "spectacular"]
+    tempo_range: [100, 140]
+  
+  pacing: "showstopping"
+  
+  text_overlay_style:
+    font: "Broadway"
+    color: "gold"
+    shadow: true
+    animation: "spotlight_reveal"
+
+documentary:
+  scoring_weights:
+    authenticity: 0.40
+    emotional_intensity: 0.30
+    mystery: 0.20
+    scale: 0.10
+  
+  color_grade:
+    filter: "eq=contrast=1.05:saturation=0.95:brightness=0.0,noise=alls=3:allf=t"
+    description: "Natural, authentic look with subtle grain"
+  
+  music_tags:
+    - ambient
+    - minimal
+    - emotional
+    - piano
+  
+  music_generation:
+    instruments:
+      intro: ["ambient textures", "soft piano", "natural sounds"]
+      build: ["strings", "piano", "subtle percussion"]
+      climax: ["emotional strings", "piano crescendo", "choir"]
+      outro: ["solo piano", "ambient fade", "natural silence"]
+    mood_descriptors: ["authentic", "moving", "informative", "powerful"]
+    tempo_range: [60, 90]
+  
+  pacing: "observational"
+  
+  text_overlay_style:
+    font: "Helvetica"
+    color: "white"
+    shadow: false
+    animation: "simple_fade"
+
+sports:
+  scoring_weights:
+    intensity: 0.35
+    triumph: 0.30
+    sacrifice: 0.20
+    suspense: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.25:saturation=1.15:brightness=0.05,unsharp=5:5:0.8"
+    description: "High energy, sharp, vibrant stadium look"
+  
+  music_tags:
+    - motivational
+    - epic
+    - energetic
+    - triumphant
+  
+  music_generation:
+    instruments:
+      intro: ["motivational piano", "soft strings", "heartbeat bass"]
+      build: ["driving drums", "electric guitar", "building strings"]
+      climax: ["full orchestra", "stadium drums", "triumphant brass"]
+      outro: ["inspirational strings", "piano", "crowd fade"]
+    mood_descriptors: ["triumphant", "inspiring", "energetic", "emotional"]
+    tempo_range: [90, 140]
+  
+  pacing: "underdog_arc"
+  
+  text_overlay_style:
+    font: "Impact"
+    color: "white"
+    shadow: true
+    animation: "dynamic_zoom"
+
+mystery:
+  scoring_weights:
+    mystery: 0.50
+    impact: 0.25
+    suspense: 0.25
+  
+  color_grade:
+    filter: "eq=contrast=1.2:saturation=0.8:brightness=-0.03,curves=all='0/0.05 0.5/0.45 1/0.95'"
+    description: "Moody, slightly desaturated with shadowy depth"
+  
+  music_tags:
+    - suspenseful
+    - mysterious
+    - piano
+    - strings
+  
+  music_generation:
+    instruments:
+      intro: ["pizzicato strings", "mysterious piano", "subtle textures"]
+      build: ["building strings", "tense woodwinds", "clock-like percussion"]
+      climax: ["revelation brass", "dramatic strings", "percussive hits"]
+      outro: ["unresolved piano", "lingering strings", "question mark"]
+    mood_descriptors: ["intriguing", "mysterious", "tense", "revelatory"]
+    tempo_range: [70, 100]
+  
+  pacing: "clue_reveal"
+  
+  text_overlay_style:
+    font: "Bodoni"
+    color: "white"
+    shadow: true
+    animation: "detective_reveal"
+
+historical:
+  scoring_weights:
+    scale: 0.60
+    authenticity: 0.25
+    warmth: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.15:saturation=0.9:brightness=0.0,curves=all='0/0.05 0.5/0.52 1/0.95',colortemperature=4800"
+    description: "Period-appropriate, slightly aged with warm undertones"
+  
+  music_tags:
+    - orchestral
+    - period
+    - epic
+    - emotional
+  
+  music_generation:
+    instruments:
+      intro: ["period instruments", "strings", "subtle choir"]
+      build: ["full orchestra", "period brass", "building drums"]
+      climax: ["epic orchestra", "massive choir", "thundering timpani"]
+      outro: ["solo violin", "fading strings", "period instruments"]
+    mood_descriptors: ["grand", "epic", "authentic", "emotional"]
+    tempo_range: [60, 110]
+  
+  pacing: "epic_sweep"
+  
+  text_overlay_style:
+    font: "Trajan Pro"
+    color: "cream"
+    shadow: true
+    animation: "stately_fade"
+
+biographical:
+  scoring_weights:
+    emotional_intensity: 0.40
+    triumph: 0.40
+    sacrifice: 0.20
+  
+  color_grade:
+    filter: "eq=contrast=1.1:saturation=0.95:brightness=0.02,curves=all='0/0.05 0.5/0.52 1/1'"
+    description: "Naturalistic, warm, intimate feel"
+  
+  music_tags:
+    - inspirational
+    - piano
+    - strings
+    - emotional
+  
+  music_generation:
+    instruments:
+      intro: ["solo piano", "soft strings", "intimate ambience"]
+      build: ["piano", "strings", "subtle percussion"]
+      climax: ["full orchestra", "inspirational brass", "emotional crescendo"]
+      outro: ["solo piano", "hopeful strings", "resolution"]
+    mood_descriptors: ["inspiring", "emotional", "personal", "triumphant"]
+    tempo_range: [65, 100]
+  
+  pacing: "life_journey"
+  
+  text_overlay_style:
+    font: "Georgia"
+    color: "white"
+    shadow: false
+    animation: "elegant_fade"
+
+# ============================================
+# EMERGING / MODERN GENRES (7)
+# ============================================
+
+superhero:
+  scoring_weights:
+    triumph: 0.35
+    scale: 0.30
+    intensity: 0.20
+    suspense: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.3:saturation=1.2:brightness=0.03,unsharp=5:5:1.2"
+    description: "Bold, saturated, comic-book inspired pop"
+  
+  music_tags:
+    - epic
+    - heroic
+    - orchestral
+    - powerful
+  
+  music_generation:
+    instruments:
+      intro: ["heroic motif", "strings", "subtle power"]
+      build: ["building orchestra", "heroic brass", "percussion"]
+      climax: ["massive orchestra", "triumphant brass", "epic drums"]
+      outro: ["heroic theme", "strings", "powerful resolution"]
+    mood_descriptors: ["heroic", "powerful", "epic", "triumphant"]
+    tempo_range: [100, 150]
+  
+  pacing: "hero_journey"
+  
+  text_overlay_style:
+    font: "Impact"
+    color: "red"
+    shadow: true
+    animation: "power_slam"
+
+dystopian:
+  scoring_weights:
+    rebellion: 0.60
+    darkness: 0.25
+    decay: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.4:saturation=0.5:brightness=-0.08,curves=all='0/0 0.4/0.3 1/0.9',colortemperature=4000"
+    description: "Bleak, desaturated, cold industrial tones"
+  
+  music_tags:
+    - industrial
+    - ominous
+    - electronic
+    - dark
+  
+  music_generation:
+    instruments:
+      intro: ["industrial drones", "distant alarms", "oppressive ambience"]
+      build: ["mechanical percussion", "distorted synth", "building tension"]
+      climax: ["aggressive industrial", "massive drums", "electronic chaos"]
+      outro: ["fading drones", "hope motif", "silence"]
+    mood_descriptors: ["oppressive", "bleak", "rebellious", "industrial"]
+    tempo_range: [70, 120]
+  
+  pacing: "oppression_to_rebellion"
+  
+  text_overlay_style:
+    font: "Eurostile"
+    color: "gray"
+    shadow: true
+    animation: "static_glitch"
+
+found_footage:
+  scoring_weights:
+    authenticity: 0.65
+    intensity: 0.20
+    suspense: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.0:saturation=0.9:brightness=0.0,noise=alls=15:allf=t,unsharp=3:3:0.5"
+    description: "Raw, handheld look with video noise and grain"
+  
+  music_tags:
+    - minimal
+    - ambient
+    - tension
+    - silence
+  
+  music_generation:
+    instruments:
+      intro: ["ambient room tone", "distant sounds", "subtle unease"]
+      build: ["growing tension", "heartbeat bass", "chaotic elements"]
+      climax: ["loud burst", "static", "overwhelming sound"]
+      outro: ["silence", "static fade", "ambient aftermath"]
+    mood_descriptors: ["raw", "authentic", "terrifying", "immediate"]
+    tempo_range: [50, 100]
+  
+  pacing: "escalating_chaos"
+  
+  text_overlay_style:
+    font: "Courier New"
+    color: "white"
+    shadow: false
+    animation: "camcorder_timestamp"
+
+kaiju:
+  scoring_weights:
+    scale: 0.40
+    decay: 0.25
+    wonder: 0.20
+    fear: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.35:saturation=1.1:brightness=-0.02,curves=all='0/0 0.5/0.45 1/1'"
+    description: "Epic scale, dramatic contrast, disaster movie tones"
+  
+  music_tags:
+    - epic
+    - massive
+    - orchestral
+    - terror
+  
+  music_generation:
+    instruments:
+      intro: ["ominous bass", "distant rumble", "eerie strings"]
+      build: ["massive percussion", "building brass", "choral elements"]
+      climax: ["thunderous orchestra", "massive drums", "choir of doom"]
+      outro: ["aftermath ambience", "fading destruction", "silence"]
+    mood_descriptors: ["massive", "terrifying", "awe-inspiring", "destructive"]
+    tempo_range: [60, 100]
+  
+  pacing: "monster_reveal"
+  
+  text_overlay_style:
+    font: "Impact"
+    color: "red"
+    shadow: true
+    animation: "earthquake_shake"
+
+cyberpunk:
+  scoring_weights:
+    visual_abstraction: 0.35
+    technology: 0.25
+    decay: 0.25
+    rebellion: 0.15
+  
+  color_grade:
+    filter: "eq=contrast=1.4:saturation=1.3:brightness=-0.05,curves=blue='0/0.2 1/1':red='0/0 1/0.9',colortemperature=8000"
+    description: "High contrast, neon-soaked, magenta and cyan push"
+  
+  music_tags:
+    - synthwave
+    - electronic
+    - dark
+    - futuristic
+  
+  music_generation:
+    instruments:
+      intro: ["synth pads", "neon ambience", "electronic textures"]
+      build: ["driving synth bass", "electronic drums", "glitch elements"]
+      climax: ["aggressive synth", "heavy electronic drums", "distorted leads"]
+      outro: ["atmospheric synth", "rain ambience", "fading neon"]
+    mood_descriptors: ["neon", "gritty", "futuristic", "rebellious"]
+    tempo_range: [100, 140]
+  
+  pacing: "neon_pulse"
+  
+  text_overlay_style:
+    font: "Orbitron"
+    color: "cyan"
+    shadow: true
+    animation: "neon_flicker"
+
+mumblecore:
+  scoring_weights:
+    authenticity: 0.70
+    intimacy: 0.20
+    awkwardness: 0.10
+  
+  color_grade:
+    filter: "eq=contrast=1.0:saturation=0.9:brightness=0.02,noise=alls=5:allf=t"
+    description: "Natural, unpolished, indie film aesthetic"
+  
+  music_tags:
+    - indie
+    - acoustic
+    - minimal
+    - lo_fi
+  
+  music_generation:
+    instruments:
+      intro: ["acoustic guitar", "room ambience", "simple piano"]
+      build: ["indie folk", "subtle drums", "gentle strings"]
+      climax: ["full indie band", "emotional vocals", "building guitars"]
+      outro: ["solo acoustic", "fading ambience", "natural silence"]
+    mood_descriptors: ["authentic", "intimate", "awkward", "real"]
+    tempo_range: [70, 110]
+  
+  pacing: "conversational"
+  
+  text_overlay_style:
+    font: "Helvetica Light"
+    color: "white"
+    shadow: false
+    animation: "simple_cut"
+
+kdrama:
+  scoring_weights:
+    emotional_intensity: 0.40
+    romantic_tension: 0.40
+    beauty: 0.20
+  
+  color_grade:
+    filter: "eq=contrast=1.1:saturation=1.15:brightness=0.05,curves=all='0/0 0.5/0.55 1/1',colortemperature=5800"
+    description: "Soft, dreamy, warm romantic glow with pastel undertones"
+  
+  music_tags:
+    - romantic
+    - emotional
+    - piano
+    - korean_pop
+  
+  music_generation:
+    instruments:
+      intro: ["emotional piano", "soft strings", "gentle ambience"]
+      build: ["piano", "strings", "building emotional swell"]
+      climax: ["full orchestra", "emotional crescendo", "powerful vocals"]
+      outro: ["solo piano", "fading strings", "bittersweet resolution"]
+    mood_descriptors: ["romantic", "melodramatic", "emotional", "beautiful"]
+    tempo_range: [60, 100]
+  
+  pacing: "emotional_waves"
+  
+  text_overlay_style:
+    font: "Noto Sans KR"
+    color: "white"
+    shadow: true
+    animation: "soft_reveal"

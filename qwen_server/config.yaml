@@ -24,7 +24,7 @@ model:
     quant_type: "nf4"                 # Options: nf4, fp4 (for int4 only, nf4 recommended for LLMs)
     double_quant: true                # Use nested quantization for extra memory savings
     compute_dtype: "float16"          # Compute dtype for quantized layers (float16, bfloat16)
-  max_length: 512                     # Max tokens for generation
+  max_length: 2048                    # Max tokens for generation
   
   # Multi-GPU configuration (Phase 3)
   use_data_parallel: true             # Use DataParallel to saturate all GPUs simultaneously

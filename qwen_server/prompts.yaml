@@ -3,30 +3,78 @@
 # Edit these prompts to customize the analysis behavior
 
 # Attribute definitions - single source of truth
+# These 38 attributes correspond to scoring_weights in genre_profiles.yaml
 # Format: attribute_name: "Description text"
 attributes:
-  suspense: "Level of tension or anticipation"
-  darkness: "Visual darkness and mood"
-  ambiguity: "Unclear or mysterious elements"
-  emotional_tension: "Character stress or conflict"
-  intensity: "Overall energy and impact"
-  motion: "Amount of movement or action"
-  impact: "Visual or narrative impact"
-  energy: "Overall vitality and dynamism"
-  emotional_connection: "Relatability and emotional resonance"
-  intimacy: "Closeness and personal connection"
-  warmth: "Comfort and positive emotional tone"
-  fear: "Frightening or disturbing elements"
-  unease: "Discomfort or unsettling atmosphere"
-  shock: "Surprising or jarring moments"
-  futuristic: "Science fiction or advanced technology themes"
-  technology: "Presence of technological elements"
-  wonder: "Sense of awe or amazement"
-  scale: "Epic scope or grandeur"
-  humor: "Comedic or amusing elements"
-  lightheartedness: "Playful and carefree mood"
-  timing: "Comedic or dramatic timing quality"
-  beauty: "Aesthetic beauty or visual appeal"
+  # Core emotional/tension attributes
+  suspense: "Level of anticipation, tightness, or anxiety-building atmosphere"
+  ambiguity: "Unclear, mysterious, or open-to-interpretation elements"
+  emotional_intensity: "Strength of emotional resonance, connection, and feeling"
+  darkness: "Visual darkness, moodiness, or grim/bleak atmosphere"
+  intensity: "Overall power, vigor, energy, and dynamic force"
+  fear: "Frightening, disturbing, terrifying, or unsettling elements"
+  
+  # Action/movement attributes
+  motion: "Amount of physical movement and action on screen"
+  impact: "Visual or narrative punch, shocking or surprising moments"
+  
+  # Sci-fi/technology attributes
+  futuristic: "Science fiction, advanced technology, or future settings"
+  technology: "Presence of technological elements, devices, and machinery"
+  
+  # Wonder/scale attributes
+  wonder: "Sense of amazement, awe, marvel, or astonishment"
+  scale: "Epic scope, grandeur, spectacle, or monumental size"
+  
+  # Comedy/lightness attributes
+  humor: "Comedic, amusing, or funny elements"
+  lightheartedness: "Playful, carefree, joyful, happy mood"
+  timing: "Quality of comedic or dramatic timing"
+  absurdity: "Nonsensical, ridiculous, exaggerated, or over-the-top elements"
+  
+  # Intimacy/warmth attributes
+  intimacy: "Closeness, personal connection, and private moments"
+  warmth: "Comfort, positive emotional tone, and coziness"
+  beauty: "Aesthetic elegance, visual appeal, and stylized imagery"
+  
+  # Authenticity/documentary attributes
+  authenticity: "Documentary-like realism, naturalism, and unpolished quality"
+  awkwardness: "Uncomfortable, cringe-worthy, or socially tense moments"
+  deadpan: "Straight-faced, understated, dry delivery"
+  
+  # Mystery/investigation attributes
+  mystery: "Enigmatic elements, intrigue, and clues requiring investigation"
+  
+  # Experimental/art attributes
+  surrealism: "Dream-like, irrational, disorienting, or confusing imagery"
+  visual_abstraction: "Non-representational, stylized, or neon-aesthetic visuals"
+  unconventional: "Breaking traditional filmmaking norms and expectations"
+  
+  # Fantasy/magic attributes
+  magic: "Supernatural, mystical, or otherworldly elements"
+  adventure: "Exploration, quests, journey themes, and discovery"
+  
+  # Western/landscape attributes
+  landscape: "Environmental focus, sense of place, isolation, and solitude"
+  ruggedness: "Tough, weathered, rough, and harsh aesthetic"
+  
+  # War/sacrifice attributes
+  sacrifice: "Personal cost, hardship, struggle, and perseverance"
+  patriotism: "National pride, loyalty, duty, and service themes"
+  
+  # Musical/performance attributes
+  rhythm: "Musical timing, choreography, and coordinated movement"
+  performance: "Theatrical, stage-like, or performative quality"
+  
+  # Achievement/heroism attributes
+  triumph: "Victory, success, heroism, achievement, and overcoming obstacles"
+  
+  # Rebellion/dystopia attributes
+  rebellion: "Defiance, resistance, oppression, and anti-authority themes"
+  decay: "Deterioration, destruction, urban decay, and ruin"
+  
+  # Romance attributes
+  romantic_tension: "Romantic anticipation, fate, and destined connection"
 
 # Template variables available:
 # {{attributes}} - Generates bulleted list with descriptions (e.g., "- Suspense: Level of tension...")
@@ -47,10 +95,10 @@ default_analysis_prompt: |
 #   Describe this scene briefly and rate these attributes from 0.0 to 1.0:
 #   - Suspense: {{attributes.suspense}}
 #   - Intensity: {{attributes.intensity}}
-#   - Emotional_connection: {{attributes.emotional_connection}}
+#   - Emotional_intensity: {{attributes.emotional_intensity}}
 #   
 #   Format:
 #   Description: [description]
 #   Suspense: [0.0-1.0]
 #   Intensity: [0.0-1.0]
-#   Emotional_connection: [0.0-1.0]
+#   Emotional_intensity: [0.0-1.0]

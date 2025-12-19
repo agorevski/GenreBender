@@ -45,7 +45,8 @@ def parse_args():
         '--genre',
         type=str,
         required=True,
-        choices=['thriller', 'action', 'drama', 'horror', 'scifi', 'comedy', 'romance'],
+        choices=['comedy', 'horror', 'thriller', 'parody', 'mockumentary', 
+                 'crime', 'drama', 'experimental', 'fantasy', 'romance', 'scifi', 'action'],
         help='Target trailer genre'
     )
     parser.add_argument(
@@ -101,13 +102,13 @@ def validate_inputs(args, output_dir: Path) -> tuple:
     if not movie_name:
         movie_name = sanitize_filename(Path(args.input).stem)
     
-    # Check beat sheet
+    # Check beat sheet (genre-specific file)
     story_graph_dir = Path('outputs') / 'story_graphs' / movie_name
-    beats_path = story_graph_dir / 'beats.json'
+    beats_path = story_graph_dir / f'beats_{args.genre}.json'
     
     if not beats_path.exists():
         logger.error(f"Beat sheet not found: {beats_path}")
-        logger.error(f"Please run stage 12 first")
+        logger.error(f"Please run stage 12 first: python 12_beat_sheet_generator.py --movie-name '{movie_name}' --genre {args.genre}")
         sys.exit(1)
     
     logger.info(f"Input validation complete:")
@@ -137,10 +138,10 @@ def main():
     logger.info(f"Top-K: {args.top_k}")
     logger.info(f"Output: {output_dir}")
     
-    # Check if already completed
+    # Check if already completed for this genre
     checkpoint = CheckpointManager(output_dir / 'checkpoint.json')
-    if not args.force and checkpoint.is_stage_completed(STAGE_NAME):
-        logger.info(f"Stage '{STAGE_NAME}' already completed. Use --force to re-retrieve.")
+    if not args.force and checkpoint.is_stage_completed(STAGE_NAME, args.genre):
+        logger.info(f"Stage '{STAGE_NAME}' already completed for genre '{args.genre}'. Use --force to re-retrieve.")
         return 0
     
     # Validate inputs
@@ -186,14 +187,14 @@ def main():
         logger.info(f"  Avg candidates per beat: {avg_candidates:.1f}")
         logger.info(f"  Output: {output_path}")
         
-        # Update checkpoint
+        # Update checkpoint for this genre
         checkpoint.mark_stage_completed(STAGE_NAME, {
             'selected_scenes': str(output_path),
             'target_genre': args.genre,
             'top_k': args.top_k,
             'total_beats': total_beats,
             'total_candidates': total_candidates
-        })
+        }, genre=args.genre)
         
         return 0
         

@@ -10,20 +10,21 @@ from pathlib import Path
 
 from pipeline_common import (
     initialize_stage, print_completion_message, add_common_arguments,
-    load_config, load_shots_from_metadata, save_shots_to_metadata
+    load_config
 )
+from trailer_generator.checkpoint import load_shots_from_metadata, save_shots_to_metadata
 from trailer_generator.ingest import KeyframeExtractor
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Stage 2: Keyframe Extraction - Extract multiple frames per shot'
+        description='Stage 2: Keyframe Extraction - Extract multiple frames per shot (genre-agnostic)'
     )
     add_common_arguments(parser)
     args = parser.parse_args()
     
-    # Initialize
+    # Initialize (genre-agnostic stage)
     output_base, dirs, checkpoint, logger = initialize_stage(
-        'keyframe_extraction', args.input, args.genre
+        'keyframe_extraction', args.input
     )
     
     # Validate prerequisite

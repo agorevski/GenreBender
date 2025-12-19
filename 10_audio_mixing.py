@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from pipeline_common import (
-    initialize_stage, print_completion_message, add_common_arguments,
+    initialize_stage, print_completion_message, add_genre_arguments,
     load_config, load_genre_profile
 )
 from trailer_generator.audio import AudioMixer
@@ -18,9 +18,9 @@ from trailer_generator.narrative import AzureOpenAIClient
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Stage 9: Audio Mixing - Add music and effects to create final trailer'
+        description='Stage 10: Audio Mixing - Add music and effects to create final trailer'
     )
-    add_common_arguments(parser)
+    add_genre_arguments(parser)
     parser.add_argument('--music-file', type=str,
                        help='Specific music file to use (optional)')
     parser.add_argument('--no-ducking', action='store_true',
@@ -36,21 +36,31 @@ def main():
         'audio_mixing', args.input, args.genre
     )
     
-    # Validate prerequisites (stages 1-5, 15, 9)
-    required_stages = ['shot_detection', 'keyframe_extraction', 'audio_extraction',
-                      'subtitle_management', 'remote_analysis', 'timeline_construction',
-                      'video_assembly']
-    for stage in required_stages:
+    # Validate prerequisites (genre-agnostic stages)
+    agnostic_stages = ['shot_detection', 'keyframe_extraction', 'audio_extraction',
+                       'subtitle_management', 'remote_analysis']
+    for stage in agnostic_stages:
         if not checkpoint.is_stage_completed(stage):
             logger.error(f"❌ Prerequisite stage '{stage}' not completed.")
             print(f"\n❌ Error: You must complete all previous stages first!")
             print(f"Missing: {stage}")
-            print(f"Run: {required_stages.index(stage) + 1}_{stage}.py")
             sys.exit(1)
     
-    # Check if already completed
-    final_trailer_path = dirs['output'] / args.output_name
-    if checkpoint.is_stage_completed('audio_mixing') and not args.force:
+    # Validate genre-dependent prerequisites
+    genre_stages = ['timeline_construction', 'video_assembly']
+    for stage in genre_stages:
+        if not checkpoint.is_stage_completed(stage, args.genre):
+            logger.error(f"❌ Prerequisite stage '{stage}' for genre '{args.genre}' not completed.")
+            print(f"\n❌ Error: You must complete stage '{stage}' for genre '{args.genre}' first!")
+            sys.exit(1)
+    
+    # Genre-specific output path
+    genre_output_dir = dirs.get('genre_base', dirs['output'])
+    genre_output_dir.mkdir(parents=True, exist_ok=True)
+    final_trailer_path = genre_output_dir / f'trailer_{args.genre}_final.mp4'
+    
+    # Check if already completed for this genre
+    if checkpoint.is_stage_completed('audio_mixing', args.genre) and not args.force:
         logger.warning("⚠️  Audio mixing already completed. Use --force to re-run.")
         print("\n⚠️  This stage is already completed.")
         print(f"Final trailer: {final_trailer_path}")
@@ -77,11 +87,15 @@ def main():
     
     logger.info(f"Loaded timeline with {len(timeline.get('timeline', []))} shots")
     
-    # Get assembled video
-    assembled_video = dirs['output'] / 'trailer_assembled.mp4'
+    # Get assembled video (genre-specific path)
+    assembled_video = genre_output_dir / f'trailer_{args.genre}_assembled.mp4'
     if not assembled_video.exists():
-        logger.error("Assembled video not found. Run stage 8 first.")
-        print("\n❌ Error: Assembled video not found. Run 8_video_assembly.py first!")
+        # Fallback to old path
+        assembled_video = dirs['output'] / 'trailer_assembled.mp4'
+    
+    if not assembled_video.exists():
+        logger.error("Assembled video not found. Run stage 9 first.")
+        print("\n❌ Error: Assembled video not found. Run 9_video_assembly.py first!")
         sys.exit(1)
     
     logger.info(f"Using assembled video: {assembled_video}")
@@ -148,12 +162,12 @@ def main():
         logger.info(f"Final trailer created: {final_trailer}")
         logger.info(f"File size: {file_size_mb:.1f} MB")
         
-        # Mark stage completed
+        # Mark stage completed for this genre
         checkpoint.mark_stage_completed('audio_mixing', {
             'output_file': str(final_trailer),
             'file_size_mb': round(file_size_mb, 2),
             'duration': timeline.get('total_duration', 0)
-        })
+        }, genre=args.genre)
         
         # Print final completion
         stats = checkpoint.get_stats()
@@ -168,7 +182,7 @@ def main():
         print(f"\n✓ Pipeline Progress: {stats['completed_stages']}/{stats['total_stages']} stages (100%)")
         
         print("\n" + "=" * 60)
-        print("🎉 ALL 9 PIPELINE STAGES COMPLETED! 🎉")
+        print(f"🎉 TRAILER GENERATION COMPLETE FOR GENRE: {args.genre.upper()} 🎉")
         print("=" * 60)
         
         print("\nGenerated files:")

@@ -39,6 +39,8 @@ class SubtitleExtractor:
         """
         Load and parse SRT file.
         
+        Tries multiple encodings for compatibility with various subtitle sources.
+        
         Args:
             srt_path: Path to SRT file
             
@@ -49,16 +51,28 @@ class SubtitleExtractor:
             logger.error("pysrt not available, cannot load SRT file")
             return None
         
-        try:
-            subs = pysrt.open(srt_path, encoding='utf-8')
-            logger.info(f"Loaded {len(subs)} subtitle entries from {srt_path}")
-            return subs
-        except FileNotFoundError:
+        # Check if file exists first
+        if not Path(srt_path).exists():
             logger.error(f"SRT file not found: {srt_path}")
             return None
-        except Exception as e:
-            logger.error(f"Failed to parse SRT file: {e}")
-            return None
+        
+        # Common encodings for subtitle files
+        encodings = ['utf-8', 'latin-1', 'windows-1252', 'utf-16', 'iso-8859-1', 'cp1252']
+        
+        for encoding in encodings:
+            try:
+                subs = pysrt.open(srt_path, encoding=encoding)
+                logger.info(f"Loaded {len(subs)} subtitle entries from {srt_path} (encoding: {encoding})")
+                return subs
+            except UnicodeDecodeError:
+                logger.debug(f"Encoding {encoding} failed, trying next...")
+                continue
+            except Exception as e:
+                logger.debug(f"Failed to parse SRT with {encoding}: {e}")
+                continue
+        
+        logger.error(f"Failed to load SRT file with any encoding: {srt_path}")
+        return None
     
     def find_srt_file(self, video_path: str, explicit_srt: Optional[str] = None) -> Optional[str]:
         """

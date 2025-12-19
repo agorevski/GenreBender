@@ -10,8 +10,9 @@ from pathlib import Path
 
 from pipeline_common import (
     initialize_stage, print_completion_message, add_common_arguments,
-    load_config, load_shots_from_metadata, save_shots_to_metadata
+    load_config
 )
+from trailer_generator.checkpoint import load_shots_from_metadata, save_shots_to_metadata
 from trailer_generator.analysis import RemoteAnalyzer, MultiServerAnalyzer, AnalysisCache
 from trailer_generator.ingest import BatchProcessor
 
@@ -34,44 +35,21 @@ def create_skipped_analysis(reason: str, min_duration: float = None) -> dict:
         'caption': caption,
         'skipped': True,
         'skip_reason': reason,
-        'attributes': {
-            'suspense': 0.0,
-            'darkness': 0.0,
-            'ambiguity': 0.0,
-            'emotional_tension': 0.0,
-            'intensity': 0.0,
-            'motion': 0.0,
-            'impact': 0.0,
-            'energy': 0.0,
-            'emotional_connection': 0.0,
-            'intimacy': 0.0,
-            'warmth': 0.0,
-            'fear': 0.0,
-            'unease': 0.0,
-            'shock': 0.0,
-            'futuristic': 0.0,
-            'technology': 0.0,
-            'wonder': 0.0,
-            'scale': 0.0,
-            'humor': 0.0,
-            'lightheartedness': 0.0,
-            'timing': 0.0,
-            'beauty': 0.0
-        }
+        'attributes': { }
     }
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Stage 4: Remote Analysis - Multimodal analysis with Qwen2-VL'
+        description='Stage 5: Remote Analysis - Multimodal analysis with Qwen2-VL (genre-agnostic)'
     )
     add_common_arguments(parser)
     parser.add_argument('--skip-cache', action='store_true',
                        help='Disable analysis caching')
     args = parser.parse_args()
     
-    # Initialize
+    # Initialize (genre-agnostic stage)
     output_base, dirs, checkpoint, logger = initialize_stage(
-        'remote_analysis', args.input, args.genre
+        'remote_analysis', args.input
     )
     
     # Validate prerequisites

@@ -10,20 +10,21 @@ from pathlib import Path
 
 from pipeline_common import (
     initialize_stage, print_completion_message, add_common_arguments,
-    load_config, save_shots_to_metadata
+    load_config
 )
+from trailer_generator.checkpoint import save_shots_to_metadata
 from trailer_generator.ingest import ShotDetector
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Stage 1: Shot Detection - Identify scene boundaries'
+        description='Stage 1: Shot Detection - Identify scene boundaries (genre-agnostic)'
     )
     add_common_arguments(parser)
     args = parser.parse_args()
     
-    # Initialize
+    # Initialize (genre-agnostic stage)
     output_base, dirs, checkpoint, logger = initialize_stage(
-        'shot_detection', args.input, args.genre
+        'shot_detection', args.input
     )
     
     # Check if already completed
