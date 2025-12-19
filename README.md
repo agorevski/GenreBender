@@ -2,14 +2,14 @@
 
 A sophisticated, AI-powered system for automatically generating cinematic trailers from full-length movies in **multiple genres simultaneously**!
 
-Built with modular architecture supporting 12 genres and parallel processing pipelines.
+Built with modular architecture supporting **27 genres** and parallel processing pipelines.
 
 ## 🎬 Overview
 
 GenreBender transforms full-length movies into compelling trailers by:
 1. Analyzing visual, temporal, and audio content using multimodal AI
 2. Generating semantic story graphs and genre-specific beat sheets
-3. Matching scenes to trailer beats using embedding similarity
+3. Matching scenes to trailer beats using embedding similarity and FAISS
 4. Assembling video with genre-specific color grading and transitions
 5. Mixing audio with music and effects
 
@@ -31,35 +31,59 @@ The system processes movies through a multi-phase pipeline that can generate **m
 | Stage | Function | Technology |
 |-------|----------|------------|
 | 12. Beat Sheet | Genre-specific trailer beats | GPT-4 |
-| 13. Embeddings | Scene & beat vector embeddings | Azure OpenAI |
+| 13. Embeddings | Scene & beat vector embeddings | Azure OpenAI text-embedding-ada-002 |
 | 14. Scene Retrieval | Semantic beat-to-scene matching | FAISS |
 | 15. Timeline | Deterministic shot timeline | Custom algorithm |
 | 9. Video Assembly | Color grading & transitions | FFmpeg |
 | 10. Audio Mixing | Music with ducking | FFmpeg |
 
-## 🎭 Supported Genres (12)
+## 🎭 Supported Genres (27)
 
+### Original Genres (12)
 | Genre | Description |
 |-------|-------------|
-| `comedy` | Upbeat, humorous |
-| `horror` | Atmospheric, frightening |
 | `thriller` | Suspenseful, building tension |
+| `action` | Fast-paced, high energy |
+| `drama` | Emotional, character-driven |
+| `horror` | Atmospheric, frightening |
+| `scifi` | Futuristic, wonder-filled |
+| `comedy` | Upbeat, humorous |
+| `romance` | Warm, emotional connection |
 | `parody` | Over-the-top, comedic exaggeration |
 | `mockumentary` | Documentary-style, deadpan humor |
 | `crime` | Noir-inspired, gritty investigation |
-| `drama` | Emotional, character-driven |
 | `experimental` | Surrealist, unconventional |
 | `fantasy` | Magical, epic adventure |
-| `romance` | Warm, emotional connection |
-| `scifi` | Futuristic, wonder-filled |
-| `action` | Fast-paced, high energy |
+
+### Major Traditional Genres (8)
+| Genre | Description |
+|-------|-------------|
+| `western` | Rugged, expansive landscapes |
+| `war` | Intense, heroic sacrifice |
+| `musical` | Theatrical, showstopping performances |
+| `documentary` | Authentic, observational storytelling |
+| `sports` | Triumphant, underdog journeys |
+| `mystery` | Intriguing, clue-driven reveals |
+| `historical` | Grand, period-authentic epics |
+| `biographical` | Inspiring, personal life journeys |
+
+### Emerging/Modern Genres (7)
+| Genre | Description |
+|-------|-------------|
+| `superhero` | Heroic, powerful, epic triumphs |
+| `dystopian` | Bleak, rebellious, industrial |
+| `found_footage` | Raw, authentic, immediate terror |
+| `kaiju` | Massive scale, monster destruction |
+| `cyberpunk` | Neon-soaked, gritty futurism |
+| `mumblecore` | Intimate, naturalistic indie |
+| `kdrama` | Emotional, romantic melodrama |
 
 ## 📋 Prerequisites
 
 - Python 3.9+
 - FFmpeg (in PATH)
 - Qwen2-VL server (or compatible multimodal API)
-- Azure OpenAI API key (GPT-4)
+- Azure OpenAI API key (GPT-4 + text-embedding-ada-002)
 
 ## 🚀 Quick Start
 
@@ -74,12 +98,15 @@ pip install -r requirements.txt
 Create `.env` file:
 ```bash
 AZURE_OPENAI_KEY=your_api_key_here
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 ```
 
 Update `trailer_generator/config/settings.yaml`:
 ```yaml
 remote_analysis:
-  qwen_server_url: "http://your-server:8000"
+  server_host: "localhost"
+  server_base_port: 8000
+  server_count: 4  # Number of Qwen servers
 
 azure_openai:
   endpoint: "https://your-resource.openai.azure.com/"
@@ -119,6 +146,9 @@ python run_multi_genre_pipeline.py hitch
 # Specify parallel workers (default: 4)
 python run_multi_genre_pipeline.py hitch --parallel-workers 4
 
+# Run sequentially with full output streaming (for debugging)
+python run_multi_genre_pipeline.py hitch --sequential
+
 # Skip Phase 1 if genre-agnostic stages already complete
 python run_multi_genre_pipeline.py hitch --skip-phase1
 
@@ -156,10 +186,13 @@ python 10_audio_mixing.py --input movie.mp4 --genre thriller
 ```bash
 --input PATH              Input video file (required for stage scripts)
 --genre GENRE            Target trailer genre (required for genre-dependent stages)
+--movie-name NAME        Movie name for story graph lookup
 --force                  Force re-run even if completed
 --test                   Process only first 5 shots for testing
 --parallel-workers N     Number of parallel genre workers (default: 4)
 --skip-phase1           Skip genre-agnostic stages
+--sequential            Run Phase 2 sequentially with full output streaming
+--verbose               Enable verbose logging
 ```
 
 ## 📊 Output Structure
@@ -177,6 +210,9 @@ outputs/<sanitized_filename>/
 ├── embeddings/
 │   ├── scene_embeddings.pkl
 │   └── beat_embeddings.pkl
+├── output/
+│   ├── selected_scenes.json
+│   └── trailer_timeline.json
 ├── trailers/
 │   ├── comedy/
 │   │   ├── trailer_comedy_assembled.mp4
@@ -189,8 +225,8 @@ outputs/<sanitized_filename>/
 
 outputs/story_graphs/<movie_name>/
 ├── story_graph.json         # Semantic narrative structure
-├── beats.json              # Genre-specific beat sheets
-└── genre_rewrite.json      # Genre transformation
+├── beats_<genre>.json       # Genre-specific beat sheets
+└── genre_rewrite_<genre>.json  # Genre transformation
 ```
 
 ## 🔧 Configuration
@@ -214,15 +250,17 @@ movies:
       - romance
 ```
 
-### Genre Profiles (`genre_profiles.yaml`)
+### Genre Profiles (`trailer_generator/config/genre_profiles.yaml`)
 
 Each genre defines:
-- **Scoring weights**: Attribute importance (suspense, intensity, etc.)
+- **Scoring weights**: Attribute importance (38 total attributes)
 - **Color grading**: FFmpeg filter specifications
 - **Music tags**: Recommended audio styles
+- **Music generation**: Instruments and mood descriptors per section
 - **Pacing**: Shot timing preferences
+- **Text overlay style**: Font, color, animation
 
-### Settings (`settings.yaml`)
+### Settings (`trailer_generator/config/settings.yaml`)
 
 ```yaml
 processing:
@@ -230,12 +268,30 @@ processing:
   shot_candidate_count: 60
 
 remote_analysis:
-  qwen_server_url: "http://..."
-  batch_size: 10
+  server_host: "localhost"
+  server_base_port: 8000
+  server_count: 4  # Multi-server support
+  batch_size: 16
 
 azure_openai:
   temperature: 0.7
-  max_completion_tokens: 4000
+  max_completion_tokens: 50000
+
+embedding:
+  model: "text-embedding-ada-002"
+  batch_size: 20
+  parallel_workers: 20
+
+retrieval:
+  top_k: 10
+  scoring_weights:
+    semantic_similarity: 0.50
+    emotional_alignment: 0.25
+    visual_match: 0.20
+    original_genre_penalty: 0.05
+
+timeline:
+  target_duration: 90
 ```
 
 ## 🔌 Qwen2-VL Server
@@ -249,11 +305,42 @@ cd qwen_server
 ./stop_server.sh  # Stop server
 ```
 
+### Multi-Server Support
+
+The pipeline supports multiple Qwen servers for parallel processing:
+
+```yaml
+remote_analysis:
+  server_host: "localhost"
+  server_base_port: 8000
+  server_count: 4  # Servers on ports 8000, 8001, 8002, 8003
+  load_balancing: "round_robin"
+```
+
 ### Health Check
 
 ```bash
 curl http://localhost:8000/health
 ```
+
+## 🎬 OMDB Integration
+
+GenreBender includes OMDB API utilities for fetching movie metadata:
+
+```python
+from utilities.omdb_client import OMDBClient
+
+client = OMDBClient()
+movie = client.get_movie_by_title("Hitch")
+print(f"Genre: {movie.genre}, Rating: {movie.imdb_rating}")
+```
+
+Features:
+- Smart caching (30-day TTL)
+- Structured data models
+- Multiple search methods
+
+See `utilities/README.md` for full documentation.
 
 ## 🐛 Troubleshooting
 
@@ -267,7 +354,11 @@ curl http://localhost:8000/health
 
 3. **Out of memory**: Reduce `batch_size` in settings
 
-4. **Genre stage already completed**: Use `--force` flag
+4. **Stage already completed**: Use `--force` flag
+
+5. **"Embeddings not found"**: Run stage 13 first
+
+6. **"Beat sheet not found"**: Run stage 12 first with matching genre
 
 ### Debug Commands
 
@@ -280,6 +371,9 @@ tail -n 50 outputs/<filename>/trailer_generator.log
 
 # Check Qwen server
 curl http://localhost:8000/health
+
+# Check embeddings
+ls -la outputs/<filename>/embeddings/
 ```
 
 ## 📝 Checkpoint System
@@ -292,7 +386,7 @@ The checkpoint system tracks progress separately for:
 {
   "completed_stages": ["shot_detection", "keyframe_extraction", ...],
   "genre_stages": {
-    "comedy": ["beat_sheet_generation", "video_assembly", ...],
+    "comedy": ["beat_sheet_generation", "embedding_generation", ...],
     "thriller": ["beat_sheet_generation", ...]
   }
 }
@@ -312,9 +406,10 @@ See `audio_assets/README.md` for detailed setup.
 ## 🤝 Contributing
 
 Key extension points:
-1. **New Genres**: Add profiles to `genre_profiles.yaml`
+1. **New Genres**: Add profiles to `genre_profiles.yaml` (27 examples included)
 2. **Analysis Backends**: Implement `RemoteAnalyzer` interface
 3. **LLM Providers**: Extend `AzureOpenAIClient`
+4. **Retrieval Algorithms**: Modify `scene_retriever.py`
 
 ## 📚 Additional Documentation
 

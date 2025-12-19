@@ -1,15 +1,16 @@
 # GenreBender - AI-Powered Trailer Generator
 
 ## Project Overview
-GenreBender is a sophisticated system for automatically generating cinematic trailers from full-length movies with genre transformation (e.g., turn a drama into a thriller trailer). It uses a complete 10-stage modular pipeline combining computer vision, audio analysis, multimodal AI (Qwen2-VL), GPT-4 for narrative generation, and FFmpeg for video assembly and audio mixing.
+GenreBender is a sophisticated system for automatically generating cinematic trailers from full-length movies with genre transformation (e.g., turn a drama into a thriller trailer). It uses a complete 15-stage modular pipeline combining computer vision, audio analysis, multimodal AI (Qwen2-VL), GPT-4 for narrative generation, semantic embeddings for scene retrieval, and FFmpeg for video assembly and audio mixing.
 
 ## Technology Stack
 - **Python**: 3.9+ (primary language)
 - **Video Processing**: FFmpeg, PySceneDetect, OpenCV
 - **Audio Analysis**: librosa, soundfile
-- **AI/ML**: Qwen2-VL (multimodal analysis with 4x GPU support), Azure OpenAI GPT-4 (narrative)
+- **AI/ML**: Qwen2-VL (multimodal analysis with multi-GPU support), Azure OpenAI GPT-4 (narrative), text-embedding-ada-002 (embeddings)
+- **Vector Search**: FAISS for semantic scene retrieval
 - **Configuration**: YAML files, python-dotenv
-- **Async Processing**: Batch processing with checkpoints
+- **Async Processing**: Batch processing with checkpoints, parallel genre processing
 
 ## Project Structure
 ```
@@ -20,11 +21,17 @@ GenreBender/
 ├── 3_audio_extraction.py             # Stage 3 standalone script
 ├── 4_subtitle_management.py          # Stage 4 standalone script
 ├── 5_remote_analysis.py              # Stage 5 standalone script
-├── 6_genre_scoring.py                # Stage 6 standalone script
-├── 7_shot_selection.py               # Stage 7 standalone script
-├── 8_narrative_generation.py         # Stage 8 standalone script
+├── 6_genre_scoring.py                # Stage 6 standalone script (legacy)
+├── 7_shot_selection.py               # Stage 7 standalone script (legacy)
+├── 8_narrative_generation.py         # Stage 8 standalone script (legacy)
 ├── 9_video_assembly.py               # Stage 9 standalone script
 ├── 10_audio_mixing.py                # Stage 10 standalone script
+├── 11_story_graph_generator.py       # Stage 11 standalone script
+├── 12_beat_sheet_generator.py        # Stage 12 standalone script
+├── 13_embedding_generator.py         # Stage 13 standalone script
+├── 14_scene_retrieval.py             # Stage 14 standalone script
+├── 15_timeline_constructor.py        # Stage 15 standalone script
+├── config.yaml                       # Pipeline configuration (movies, genres)
 ├── pipeline_common.py                # Shared utilities for standalone scripts
 ├── requirements.txt                  # Python dependencies
 ├── .env                              # API keys (not in repo)
@@ -39,36 +46,57 @@ GenreBender/
 │   ├── setup.sh                      # First-time setup (model download, venv)
 │   ├── start_server.sh               # Start server (supports multiple instances)
 │   ├── stop_server.sh                # Stop all running server instances
+│   ├── tmux_launch.sh                # Launch multiple servers via tmux
 │   ├── README.md                     # Comprehensive server documentation
 │   ├── .server_pids                  # Tracks running server PIDs
 │   ├── server_8000.log               # Server logs (per port)
 │   └── venv_qwen_server/             # Isolated virtual environment
 ├── trailer_generator/                # Main package
-│   ├── checkpoint.py                 # Checkpoint/resume system
+│   ├── __init__.py
+│   ├── checkpoint.py                 # Checkpoint/resume system (v2.0 with per-genre tracking)
 │   ├── config/ 
 │   │   ├── settings.yaml             # Global configuration
-│   │   └── genre_profiles.yaml       # Genre-specific scoring weights
+│   │   └── genre_profiles.yaml       # Genre-specific scoring weights (27 genres)
 │   ├── ingest/ 
 │   │   ├── shot_detector.py          # Scene boundary detection
 │   │   ├── keyframe_extractor.py     # Multi-frame extraction (5 per shot)
 │   │   ├── audio_extractor.py        # MFCC & spectral features
+│   │   ├── subtitle_extractor.py     # Subtitle to shot mapping
 │   │   └── batch_processor.py        # Batch processing utilities
 │   ├── analysis/ 
 │   │   ├── remote_analyzer.py        # Qwen2-VL API client with auth
 │   │   ├── analysis_cache.py         # Analysis result caching
 │   │   ├── genre_scorer.py           # Genre-based shot scoring
-│   │   └── shot_selector.py          # Top shot selection
+│   │   ├── shot_selector.py          # Top shot selection
+│   │   ├── story_graph_generator.py  # Story graph generation
+│   │   └── subtitle_chunker.py       # Subtitle chunking utility
 │   ├── narrative/ 
 │   │   ├── azure_client.py           # Azure OpenAI client
+│   │   ├── beat_sheet_generator.py   # Two-stage beat sheet generation
 │   │   ├── structure_prompts.py      # LLM prompt templates
-│   │   └── timeline_generator.py     # Timeline creation logic
-│   ├── assembly/                     # Stage 8 module
+│   │   ├── timeline_generator.py     # Legacy timeline creation
+│   │   └── timeline_constructor.py   # Deterministic timeline construction
+│   ├── embeddings/                   # Stage 13 module
+│   │   ├── __init__.py
+│   │   └── embedding_generator.py    # Scene & beat embedding generation
+│   ├── retrieval/                    # Stage 14 module
+│   │   ├── __init__.py
+│   │   └── scene_retriever.py        # FAISS-based scene retrieval
+│   ├── assembly/                     # Stage 9 module
 │   │   ├── video_assembler.py        # Video concatenation & color grading
 │   │   ├── title_generator.py        # AI-powered title generation
 │   │   └── transition_selector.py    # Transition selection logic
-│   └── audio/                        # Stage 9 module
+│   └── audio/                        # Stage 10 module
 │       ├── audio_mixer.py            # Audio mixing engine
 │       └── music_selector.py         # Music library & selection
+├── utilities/                        # Standalone utility modules
+│   ├── __init__.py
+│   ├── subtitle_parser.py            # Pure subtitle parsing utility
+│   ├── omdb_client.py                # OMDB API client
+│   ├── omdb_cache.py                 # OMDB response caching
+│   ├── omdb_models.py                # Structured data models
+│   ├── example_omdb.py               # OMDB usage examples
+│   └── README.md                     # OMDB utilities documentation
 ├── audio_assets/                     # Audio resources
 │   ├── music/                        # Music library (user-populated)
 │   ├── effects/                      # Sound effects (future use)
@@ -76,21 +104,29 @@ GenreBender/
 │   │   └── cache_index.json          # Audio generation cache index
 │   └── README.md                     # Audio setup guide
 ├── outputs/                          # Generated output structure
-│   └── <sanitized_filename>/ 
-│       ├── shots/                    # Extracted video shots
-│       ├── keyframes/                # Extracted frames (5 per shot)
-│       ├── cache/                    # Analysis cache
-│       ├── output/                   # Final outputs
-│       │   ├── timeline.json         # Narrative timeline
-│       │   ├── selected_shots.json   # Top-scored shots
-│       │   ├── trailer_assembled.mp4 # Stage 8 output
-│       │   └── trailer_final.mp4     # Stage 9 output (FINAL)
-│       ├── temp/                     # Partial results & temp files
-│       ├── checkpoint.json           # Pipeline state
-│       └── trailer_generator.log     # Detailed logs
-└── samples/                          # Sample videos for testing
-    ├── caddyshack.mp4
-    └── pixar_chess.mp4
+│   ├── <sanitized_filename>/         # Per-video outputs
+│   │   ├── shots/                    # Extracted video shots
+│   │   ├── keyframes/                # Extracted frames (5 per shot)
+│   │   ├── cache/                    # Analysis cache
+│   │   ├── embeddings/               # Scene embeddings
+│   │   ├── output/                   # Selected scenes, timeline
+│   │   ├── trailers/<genre>/         # Genre-specific trailers
+│   │   ├── temp/                     # Partial results & temp files
+│   │   ├── checkpoint.json           # Pipeline state
+│   │   └── trailer_generator.log     # Detailed logs
+│   └── story_graphs/<movie_name>/    # Story graph outputs
+│       ├── story_graph.json          # Semantic story structure
+│       ├── beats_<genre>.json        # Genre-specific beat sheets
+│       └── genre_rewrite_<genre>.json# Genre reinterpretations
+└── test_files/                       # Test videos and synopses
+    ├── hitch.mp4
+    ├── hitch.srt
+    ├── hitch_synopsis.txt
+    ├── rolemodels.mp4
+    ├── rolemodels.srt
+    ├── rolemodels_synopsis.txt
+    ├── pulpfiction.srt
+    └── pulpfiction_synopsis.txt
 ```
 
 ## Development Guidelines
@@ -102,8 +138,9 @@ GenreBender/
 - Keep functions focused and modular
 
 ### Configuration Management
+- **config.yaml**: Root-level pipeline configuration (movies, genres, parallel workers)
 - **settings.yaml**: Global processing parameters, API endpoints, batch sizes
-- **genre_profiles.yaml**: Genre-specific scoring weights, color grading, pacing
+- **genre_profiles.yaml**: Genre-specific scoring weights, color grading, pacing (27 genres)
 - **qwen_server/config.yaml**: Qwen server configuration (model, GPU, API key)
 - **qwen_server/prompts.yaml**: Analysis prompt templates for attributes
 - **.env**: Environment variables for sensitive configuration (gitignored)
@@ -146,6 +183,9 @@ python run_multi_genre_pipeline.py hitch
 
 # Specify parallel workers (default: 4)
 python run_multi_genre_pipeline.py hitch --parallel-workers 4
+
+# Run sequentially with full output streaming (for debugging)
+python run_multi_genre_pipeline.py hitch --sequential
 
 # Skip Phase 1 if genre-agnostic stages are already complete
 python run_multi_genre_pipeline.py hitch --skip-phase1
@@ -191,7 +231,9 @@ python 12_beat_sheet_generator.py --movie-name "Movie" --genre horror
 python 12_beat_sheet_generator.py --movie-name "Movie" --genre comedy
 ```
 
-### Available Genres (12 total)
+### Available Genres (27 total)
+
+**Original Genres (12):**
 - `comedy`: Upbeat, humorous
 - `horror`: Atmospheric, frightening
 - `thriller`: Suspenseful, building tension
@@ -204,6 +246,25 @@ python 12_beat_sheet_generator.py --movie-name "Movie" --genre comedy
 - `romance`: Warm, emotional connection
 - `scifi`: Futuristic, wonder-filled
 - `action`: Fast-paced, high energy
+
+**Major Traditional Genres (8):**
+- `western`: Rugged, expansive landscapes
+- `war`: Intense, heroic sacrifice
+- `musical`: Theatrical, showstopping performances
+- `documentary`: Authentic, observational storytelling
+- `sports`: Triumphant, underdog journeys
+- `mystery`: Intriguing, clue-driven reveals
+- `historical`: Grand, period-authentic epics
+- `biographical`: Inspiring, personal life journeys
+
+**Emerging/Modern Genres (7):**
+- `superhero`: Heroic, powerful, epic triumphs
+- `dystopian`: Bleak, rebellious, industrial
+- `found_footage`: Raw, authentic, immediate terror
+- `kaiju`: Massive scale, monster destruction
+- `cyberpunk`: Neon-soaked, gritty futurism
+- `mumblecore`: Intimate, naturalistic indie
+- `kdrama`: Emotional, romantic melodrama
 
 ### Checkpoint System
 - Automatically saves progress after each stage completion
@@ -224,14 +285,15 @@ All outputs for a video are organized in `outputs/<sanitized_filename>/`:
 - **shots/shot_metadata.json**: Complete shot information with analysis
 - **keyframes/**: Extracted frames (5 per shot)
 - **cache/analysis_cache.json**: Cached multimodal analysis results
-- **embeddings/**: Scene and beat embeddings
+- **embeddings/scene_embeddings.pkl**: Scene vector embeddings
 - **checkpoint.json**: Pipeline state for resuming (includes per-genre tracking)
 - **trailer_generator.log**: Detailed execution logs
 
 **Genre-Specific Outputs:**
 - **trailers/<genre>/trailer_<genre>_assembled.mp4**: Video without final audio
 - **trailers/<genre>/trailer_<genre>_final.mp4**: FINAL broadcast-ready trailer
-- **trailers/<genre>/embeddings/**: Genre-specific beat embeddings
+- **output/selected_scenes.json**: Beat-matched scene candidates
+- **output/trailer_timeline.json**: Deterministic shot-level timeline
 
 **Story Graph Outputs (in outputs/story_graphs/<movie_name>/):**
 - **story_graph.json**: Semantic story structure (shared across genres)
@@ -241,7 +303,8 @@ All outputs for a video are organized in `outputs/<sanitized_filename>/`:
 ## External Dependencies
 
 ### Qwen2-VL Server
-- **Multi-GPU Support**: Automatically uses all available GPUs (designed for 4x GPU setup)
+- **Multi-GPU Support**: Automatically uses all available GPUs (designed for multi-GPU setup)
+- **Multi-Server Support**: Can run multiple servers on different ports (8000, 8001, 8002, 8003)
 - **Authentication**: Bearer token required (`Authorization: Bearer helloagorevski`)
 - **Configuration**: `qwen_server/config.yaml` for model, server, and processing settings
 - **Prompts**: Customizable analysis prompts in `qwen_server/prompts.yaml`
@@ -281,7 +344,7 @@ curl http://localhost:8000/health
 {
   "shots": [{
     "shot_id": 1,
-    "images": ["base64_img1", "base64_img2", ...],  // 5 frames
+    "images": ["base64_img1", "base64_img2", ...],
     "audio_features": {
       "mfcc_mean": [...],
       "spectral_centroid_mean": 2500.5,
@@ -316,18 +379,24 @@ curl http://localhost:8000/health
 **Configuration in settings.yaml:**
 ```yaml
 remote_analysis:
-  qwen_server_url: "http://localhost:8000"  # Server URL
-  batch_size: 10                             # Shots per batch
-  retry_attempts: 3                          # Retry on failure
-  timeout: 300                               # Request timeout (seconds)
+  server_host: "localhost"
+  server_base_port: 8000
+  server_count: 4                            # Multi-server support
+  api_key: "helloagorevski"
+  batch_size: 16
+  load_balancing: "round_robin"
+  timeout: 60
+  max_retries: 3
 ```
 
 ### Azure OpenAI
-- Requires valid endpoint and API key in `settings.yaml`
+- Requires valid endpoint and API key in `settings.yaml` or `.env`
 - Uses GPT-4 deployment for narrative generation
+- Uses text-embedding-ada-002 for embeddings
 - API key can be in `.env` file as `AZURE_OPENAI_KEY`
+- Endpoint can be in `.env` file as `AZURE_OPENAI_ENDPOINT`
 - Temperature: 0.7 (configurable)
-- Max tokens: 4000 (configurable)
+- Max tokens: 50000 (configurable)
 
 ### FFmpeg
 - Must be installed and available in system PATH
@@ -344,33 +413,37 @@ remote_analysis:
 5. **Error handling**: Pipeline should save partial results before failing
 6. **Qwen server authentication**: All analysis requests require Bearer token
 7. **Multi-GPU awareness**: Qwen server automatically distributes across GPUs
+8. **Embedding consistency**: Scene and beat embeddings must use the same model
 
 ### Performance Considerations:
-- Default batch size: 10 shots (configurable in `settings.yaml`)
+- Default batch size: 16 shots (configurable in `settings.yaml`)
 - Keyframes: 5 frames per shot (temporal analysis requires multiple frames)
 - Analysis caching significantly speeds up re-runs
 - Test mode (`--test`) limits to first 5 shots for quick validation
-- Qwen server with 4x GPUs: ~1-2 seconds per shot, ~8-15 seconds per batch (10 shots)
+- Qwen server with 4x GPUs: ~1-2 seconds per shot, ~8-15 seconds per batch
 - Typical movie (500-1000 shots): ~8-20 minutes for analysis stage
+- Embedding generation: ~20 parallel API requests for speed
+- Scene retrieval uses FAISS for sub-millisecond similarity search
 
 ### File Naming:
 - Input filenames are sanitized for directory names (remove spaces, special chars)
 - Output structure is consistent: `outputs/<sanitized_name>/`
 - Shot files: `shot_0001.mp4`, `shot_0002.mp4`, etc.
 - Keyframe files: `kf_0001_1.jpg` through `kf_0001_5.jpg` (5 frames per shot)
+- Genre-specific files: `beats_<genre>.json`, `trailer_<genre>_final.mp4`
 
 ## Testing
 
 ### Test Mode
 - Use `--test` flag to process only first 5 shots
 - Useful for validating pipeline changes quickly
-- Sample videos available in `samples/` directory (caddyshack.mp4, pixar_chess.mp4)
+- Sample videos available in `test_files/` directory
 
 ### Manual Testing Workflow
 1. Test with `--test` flag first
 2. Check logs in `outputs/<filename>/trailer_generator.log`
 3. Verify checkpoint saves correctly
-4. Test resume functionality with `--resume-from`
+4. Test resume functionality with `--force`
 5. Validate final timeline.json structure
 6. Test stage-by-stage execution for granular control
 
@@ -389,6 +462,9 @@ remote_analysis:
    - Check Qwen server GPU memory: `nvidia-smi`
 5. **librosa import error**: Install system dependencies (libsndfile1)
 6. **"401 Unauthorized"**: Check Qwen server authentication token
+7. **"Embeddings not found"**: Run stage 13 first
+8. **"Beat sheet not found"**: Run stage 12 first with matching genre
+9. **FAISS import error**: Install faiss-cpu or faiss-gpu
 
 ### Log Locations:
 - Main log: `outputs/<filename>/trailer_generator.log`
@@ -408,7 +484,10 @@ tail -n 50 outputs/<filename>/trailer_generator.log
 jq 'length' outputs/<filename>/shots/shot_metadata.json
 
 # View timeline
-jq . outputs/<filename>/output/timeline.json
+jq . outputs/<filename>/output/trailer_timeline.json
+
+# Check embeddings
+ls -la outputs/<filename>/embeddings/
 
 # Check Qwen server status
 curl http://localhost:8000/health
@@ -439,6 +518,7 @@ cat qwen_server/.server_pids
 12. **Use standalone scripts** for debugging specific stages
 13. **Check authentication tokens** when modifying Qwen server interactions
 14. **Monitor GPU memory** when processing large batches
+15. **Ensure embedding model consistency** between scene and beat embeddings
 
 ## Music Library Setup
 
@@ -456,8 +536,8 @@ See `audio_assets/README.md` for detailed setup.
 Configure in `settings.yaml`:
 ```yaml
 video:
-  ai_title_generation: false      # GPT-4 title cards
-  ai_transition_selection: false  # GPT-4 transition selection
+  ai_title_generation: true       # GPT-4 title cards
+  ai_transition_selection: true   # GPT-4 transition selection
 
 audio:
   ai_music_selection: false       # GPT-4 music recommendation
@@ -470,6 +550,7 @@ audio:
 - **README.md**: Main project overview and quick start
 - **qwen_server/README.md**: Detailed Qwen server setup, API, and troubleshooting
 - **audio_assets/README.md**: Music library setup and usage
+- **utilities/README.md**: OMDB API utilities documentation
 - **.clinerules**: This file - development guidelines for AI assistants
 
 ## Utilities
@@ -508,6 +589,45 @@ formatted = parser.get_formatted_subtitles()  # List of formatted strings
 **Used by:**
 - `11_story_graph_generator.py` - Story graph generation
 - `trailer_generator/ingest/subtitle_extractor.py` - Pipeline subtitle processing
+
+### OMDB Utilities (`utilities/omdb_*.py`)
+OMDB API client for fetching movie metadata with caching support.
+
+**Features:**
+- Structured data models (`OMDBMovie`, `OMDBRating`)
+- Smart caching (30-day TTL)
+- Error handling with custom exceptions
+- Retry logic for network failures
+- Multiple search methods (title, IMDb ID, query)
+
+**Usage:**
+```python
+from utilities.omdb_client import OMDBClient
+from utilities.omdb_cache import OMDBCache
+
+# Initialize client
+client = OMDBClient()
+
+# Fetch movie by title
+movie = client.get_movie_by_title("Hitch")
+print(f"Title: {movie.title}")
+print(f"Genre: {movie.genre}")
+print(f"IMDb Rating: {movie.imdb_rating}")
+
+# Use cache for efficiency
+cache = OMDBCache(output_dir="outputs/hitch")
+movie = cache.get_or_fetch("Hitch", client.get_movie_by_title)
+```
+
+**Configuration in settings.yaml:**
+```yaml
+omdb:
+  api_key: "83fd90a1"      # Free tier (1,000 requests/day)
+  cache_enabled: true
+  cache_ttl: 2592000       # 30 days
+```
+
+See `utilities/README.md` for complete documentation.
 
 ## Story Graph Generator - Stage 11 (`11_story_graph_generator.py`)
 
@@ -615,46 +735,9 @@ python 11_story_graph_generator.py \
 - `utilities/subtitle_parser.py` - Subtitle parsing
 - `trailer_generator/narrative/azure_client.py` - GPT-4 integration
 
-## Scripts
+## Beat Sheet Generator - Stage 12 (`12_beat_sheet_generator.py`)
 
-### Multi-Genre Pipeline
-- **run_multi_genre_pipeline.py**: Full multi-genre pipeline orchestrator
-  - Phase 1: Genre-agnostic stages (1-5, 11) run sequentially
-  - Phase 2: Genre-dependent stages (12-15, 9-10) run in parallel per genre
-  - Usage: `python run_multi_genre_pipeline.py hitch --parallel-workers 4`
-
-### Qwen Server Management
-- **qwen_server/setup.sh**: First-time setup (venv, dependencies, model download)
-- **qwen_server/start_server.sh**: Start Qwen server (supports multiple instances)
-- **qwen_server/stop_server.sh**: Stop all running Qwen server instances
-
-**Qwen Server Usage:**
-```bash
-# Setup (first time only)
-cd qwen_server && ./setup.sh
-
-# Start server
-./start_server.sh
-
-# Stop server
-./stop_server.sh
-```
-
-**Multi-Genre Pipeline Usage:**
-```bash
-# Run complete multi-genre trailer generation
-python run_multi_genre_pipeline.py hitch
-
-# With custom parallel workers
-python run_multi_genre_pipeline.py hitch --parallel-workers 4
-
-# Skip Phase 1 if already complete
-python run_multi_genre_pipeline.py hitch --skip-phase1
-```
-
-## Beat Sheet Generator - Stage 12 / Layer 2.2 (`12_beat_sheet_generator.py`)
-
-Transforms story graphs into genre-specific trailer beat sheets through two-stage LLM processing. This is **Layer 2.2** of the genre transformation pipeline, producing structured beats for automated scene retrieval.
+Transforms story graphs into genre-specific trailer beat sheets through two-stage LLM processing.
 
 **Required Inputs:**
 - Story graph from Stage 11 (`story_graph.json`)
@@ -664,8 +747,8 @@ Transforms story graphs into genre-specific trailer beat sheets through two-stag
 ```
 outputs/story_graphs/<movie_name>/
 ├── story_graph.json                  # Stage 11 input (shared)
-├── beats_{genre}.json                # Stage 2 output (per genre, e.g., beats_thriller.json)
-├── genre_rewrite_{genre}.json        # Stage 1 output (per genre, e.g., genre_rewrite_thriller.json)
+├── beats_{genre}.json                # Stage 2 output (per genre)
+├── genre_rewrite_{genre}.json        # Stage 1 output (per genre)
 ├── metadata_beats.json               # Generation metadata
 └── beat_sheet_generator.log          # Detailed logs
 ```
@@ -682,18 +765,6 @@ python 12_beat_sheet_generator.py \
   --movie-name "Airplane!" \
   --target-genre horror \
   --force
-
-# Custom temperature
-python 12_beat_sheet_generator.py \
-  --movie-name "Movie" \
-  --target-genre action \
-  --temperature 0.8
-
-# Validate only
-python 12_beat_sheet_generator.py \
-  --movie-name "Movie" \
-  --target-genre drama \
-  --validate-only
 ```
 
 **Two-Stage Process:**
@@ -701,84 +772,178 @@ python 12_beat_sheet_generator.py \
 1. **Genre Reinterpretation (LLM Call 1)**
    - Reframes the original movie in the target genre
    - Transforms tone, conflict, and emotional arc
-   - Preserves core plot and characters
-   - Outputs: `genre_rewrite.json` with:
-     - new_genre, logline, primary_conflict
-     - antagonistic_forces, genre_motifs
-     - tone_profile (pace, visual_tone, sound_profile)
-     - emotional_arc_transformed (opening → build → climax → resolution)
+   - Outputs: `genre_rewrite_{genre}.json`
 
 2. **Beat Sheet Generation (LLM Call 2)**
    - Creates 8-12 trailer beats from reinterpretation
-   - Each beat includes:
-     - id, name, description
-     - target_emotion
-     - visual_requirements (3-5 items)
-     - audio_cue
-     - voiceover (optional)
-     - **embedding_prompt** (dense text for Layer 2.3 retrieval)
-   - Follows standard trailer structure: hook → setup → conflict → escalation → climax
+   - Each beat includes: id, name, description, target_emotion, visual_requirements, audio_cue, voiceover, embedding_prompt
+   - Outputs: `beats_{genre}.json`
 
 **Configuration (`settings.yaml`):**
 ```yaml
 beat_sheet:
-  temperature: 0.7              # LLM creativity (0.0-1.0)
-  min_beats: 8                  # Minimum trailer beats
-  max_beats: 12                 # Maximum trailer beats
-  target_duration: 90           # Target trailer length (seconds)
-  embedding_model: "text-embedding-ada-002"  # For Layer 2.3
-  embedding_batch_size: 10      # Batch size for embeddings
+  temperature: 0.7
+  min_beats: 8
+  max_beats: 12
+  target_duration: 90
 ```
 
-**Features:**
-- Two-stage LLM processing with structured JSON output
-- Automatic genre context loading from `genre_profiles.yaml`
-- Validates 8-12 beats, 3-5 visual requirements per beat
-- Saves intermediate `genre_rewrite.json` for debugging
-- Rich embedding prompts (50+ words) for semantic scene matching
-- Processing time: ~10-20 seconds per beat sheet
+## Embedding Generator - Stage 13 (`13_embedding_generator.py`)
+
+Generates vector embeddings for semantic scene retrieval using Azure OpenAI text-embedding-ada-002.
+
+**Required Inputs:**
+- Shot metadata from stages 1-5
+- Beat sheet from stage 12
+
+**Output Files:**
+- `embeddings/scene_embeddings.pkl` - Scene vector embeddings
+- `embeddings/beat_embeddings.pkl` - Beat vector embeddings
+
+**Usage:**
+```bash
+python 13_embedding_generator.py \
+  --input movie.mp4 \
+  --genre thriller \
+  --movie-name "Movie"
+```
+
+**Configuration (`settings.yaml`):**
+```yaml
+embedding:
+  model: "text-embedding-ada-002"
+  batch_size: 20
+  max_input_tokens: 50000
+  parallel_requests: true
+  parallel_workers: 20
+```
 
 **Core Module:**
-- `trailer_generator/narrative/beat_sheet_generator.py` - Two-stage generator
-  - `BeatSheetGenerator` class
-  - `generate_beat_sheet()` - Main entry point
-  - `_stage1_genre_reinterpretation()` - LLM Call 1
-  - `_stage2_beat_sheet_generation()` - LLM Call 2
-  - `_validate_beat_sheet()` - Schema validation
-  - `_generate_embeddings()` - Placeholder for Layer 2.3
+- `trailer_generator/embeddings/embedding_generator.py` - Embedding generation logic
 
-**Dependencies:**
-- Azure OpenAI API key (configured in `settings.yaml`)
-- Story graph from Stage 11
-- Python: `openai`, `pyyaml` (already in requirements.txt)
+## Scene Retrieval - Stage 14 (`14_scene_retrieval.py`)
 
-**Integration Flow:**
+Performs semantic beat-to-scene matching using FAISS and multi-factor scoring.
+
+**Required Inputs:**
+- Scene and beat embeddings from stage 13
+- Shot metadata
+- Beat sheet
+
+**Output Files:**
+- `output/selected_scenes.json` - Beat-matched scene candidates
+
+**Usage:**
+```bash
+python 14_scene_retrieval.py \
+  --input movie.mp4 \
+  --genre thriller \
+  --movie-name "Movie" \
+  --top-k 10
 ```
-Stage 11: Story Graph → Stage 12: Beat Sheet → Layer 2.3: Scene Retrieval
-                         ↓
-                   genre_rewrite_{genre}.json (intermediate, per genre)
-                   beats_{genre}.json (with embedding prompts, per genre)
-                         ↓
-                   [Future: Semantic scene matching with embeddings]
+
+**Multi-Factor Scoring:**
+```yaml
+retrieval:
+  top_k: 10
+  scoring_weights:
+    semantic_similarity: 0.50    # Embedding cosine similarity
+    emotional_alignment: 0.25    # Emotion matching
+    visual_match: 0.20           # Visual attribute matching
+    original_genre_penalty: 0.05 # Small penalty for original genre
 ```
 
-**Common Issues:**
-- **"Story graph not found"**: Run Stage 11 first
-- **"Unsupported genre"**: Check `genre_profiles.yaml` for valid genres
-- **Empty JSON response**: Verify Azure OpenAI configuration and `max_completion_tokens`
-- **Beat count validation error**: Adjust `min_beats`/`max_beats` in settings.yaml
+**Core Module:**
+- `trailer_generator/retrieval/scene_retriever.py` - FAISS-based retrieval
+
+## Timeline Constructor - Stage 15 (`15_timeline_constructor.py`)
+
+Builds deterministic shot-level timeline from beat-matched scenes.
+
+**Required Inputs:**
+- Selected scenes from stage 14
+
+**Output Files:**
+- `output/trailer_timeline.json` - Complete shot-level timeline
+
+**Usage:**
+```bash
+python 15_timeline_constructor.py \
+  --input movie.mp4 \
+  --genre thriller \
+  --target-duration 90
+```
+
+**Output Structure:**
+```json
+{
+  "total_shots": 45,
+  "actual_duration": 88.5,
+  "shots": [...],
+  "metadata": {
+    "pacing_profile": {
+      "avg_shot_duration": 1.97,
+      "shots_per_minute": 30.5
+    }
+  }
+}
+```
+
+**Configuration (`settings.yaml`):**
+```yaml
+timeline:
+  target_duration: 90
+  pacing_rules: null  # null = use defaults
+```
+
+**Core Module:**
+- `trailer_generator/narrative/timeline_constructor.py` - Timeline construction logic
+
+## Scripts
+
+### Multi-Genre Pipeline
+- **run_multi_genre_pipeline.py**: Full multi-genre pipeline orchestrator
+  - Phase 1: Genre-agnostic stages (1-5, 11) run sequentially
+  - Phase 2: Genre-dependent stages (12-15, 9-10) run in parallel per genre
+  - Supports sequential mode for debugging (`--sequential`)
+  - Usage: `python run_multi_genre_pipeline.py hitch --parallel-workers 4`
+
+### Qwen Server Management
+- **qwen_server/setup.sh**: First-time setup (venv, dependencies, model download)
+- **qwen_server/start_server.sh**: Start Qwen server (supports multiple instances)
+- **qwen_server/stop_server.sh**: Stop all running Qwen server instances
+- **qwen_server/tmux_launch.sh**: Launch multiple servers via tmux
 
 ## Shared Utilities
 
 **pipeline_common.py**: Shared utilities for standalone stage scripts
-- Configuration loading
-- Output directory management
-- Checkpoint handling
-- Common argument parsing
-- Logging setup
-- File path utilities
+- Configuration loading (`load_config`, `load_pipeline_config`, `get_movie_config`)
+- Output directory management (`get_output_base_dir`, `get_genre_output_dir`, `get_story_graph_dir`)
+- Checkpoint handling (`initialize_stage`, `initialize_genre_stage`)
+- Common argument parsing (`add_common_arguments`, `add_genre_arguments`)
+- Logging setup (`setup_logging`)
+- File path utilities (`sanitize_filename`, `get_genre_filename`)
+- Genre list (`ALL_GENRES` - 12 core genres)
 
-Used by all standalone stage scripts (1_*.py through 11_*.py) and beat sheet generator (12_*.py) to ensure consistency.
+Used by all standalone stage scripts (1_*.py through 15_*.py) to ensure consistency.
+
+## Genre Profiles
+
+**38 Consolidated Attributes** used for scoring:
+- suspense, ambiguity, emotional_intensity, darkness, intensity, motion, impact
+- fear, futuristic, technology, wonder, scale, humor, lightheartedness, timing
+- intimacy, warmth, beauty, absurdity, authenticity, awkwardness, deadpan
+- mystery, surrealism, visual_abstraction, unconventional, magic, adventure
+- landscape, ruggedness, sacrifice, patriotism, rhythm, performance, triumph
+- rebellion, decay, romantic_tension
+
+Each genre profile includes:
+- **scoring_weights**: Attribute importance (subset of 38 attributes)
+- **color_grade**: FFmpeg filter string and description
+- **music_tags**: Keywords for music selection
+- **music_generation**: Instruments per section (intro, build, climax, outro)
+- **pacing**: Shot timing preference
+- **text_overlay_style**: Font, color, shadow, animation
 
 ## Future Enhancement Notes
 - Title card overlay rendering (drawtext filter)
@@ -788,3 +953,4 @@ Used by all standalone stage scripts (1_*.py through 11_*.py) and beat sheet gen
 - Real-time preview mode
 - Qwen server clustering for horizontal scaling
 - Support for additional multimodal models
+- Additional embedding models (e.g., OpenAI text-embedding-3-large)
