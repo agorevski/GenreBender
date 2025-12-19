@@ -1,0 +1,11 @@
+# GenreBender Pipeline Configuration
+# Usage: ./run_semantic_pipeline.sh <key>
+# Example: ./run_semantic_pipeline.sh hitch
+
+movies:
+  hitch:
+    movie_name: "Hitch"
+    video: "./test_files/hitch.mp4"
+    subtitles: "./test_files/hitch.srt"
+    synopsis: "./test_files/hitch_synopsis.txt"
+    genre: "thriller"

@@ -1,20 +1,24 @@
 #!/bin/bash
 # Semantic Genre-Bending Trailer Pipeline
 # Orchestrates all stages from shot detection to final trailer assembly
-# REQUIRES: synopsis and subtitle files for semantic pipeline
+# REQUIRES: config.yaml with movie configurations
 #
-# Usage: ./run_semantic_pipeline.sh <video.mp4> <genre> <movie_name> <synopsis.txt> <subtitles.srt>
+# Usage: ./run_semantic_pipeline.sh <config_key>
 #
 # Arguments:
-#   video.mp4    - Input video file
-#   genre        - Target genre (thriller, action, drama, horror, scifi, comedy, romance)
-#   movie_name   - Movie title (for story graph lookup)
-#   synopsis.txt - Path to synopsis text file (REQUIRED)
-#   subtitles.srt- Path to SRT subtitle file (REQUIRED)
+#   config_key   - Key from config.yaml movies section (e.g., hitch, caddyshack)
 #
 # Example:
-#   ./run_semantic_pipeline.sh test_files/hitch.mp4 thriller "Hitch" \
-#     test_files/hitch_synopsis.txt test_files/hitch.srt
+#   ./run_semantic_pipeline.sh hitch
+#
+# Config file format (config.yaml):
+#   movies:
+#     hitch:
+#       movie_name: "Hitch"
+#       video: "./test_files/hitch.mp4"
+#       subtitles: "./test_files/hitch.srt"
+#       synopsis: "./test_files/hitch_synopsis.txt"
+#       genre: "thriller"
 
 set -e  # Exit on error
 
@@ -25,26 +29,87 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Parse arguments
-VIDEO="$1"
-GENRE="$2"
-MOVIE_NAME="$3"
-SYNOPSIS="$4"
-SUBTITLES="$5"
+# Config file path
+CONFIG_FILE="config.yaml"
 
-# Validation
-if [ -z "$VIDEO" ] || [ -z "$GENRE" ] || [ -z "$MOVIE_NAME" ] || [ -z "$SYNOPSIS" ] || [ -z "$SUBTITLES" ]; then
-    echo -e "${RED}Error: Missing required arguments${NC}"
+# Parse arguments
+KEY="$1"
+
+# Validation - check for key argument
+if [ -z "$KEY" ]; then
+    echo -e "${RED}Error: Missing config key argument${NC}"
     echo ""
-    echo "Usage: $0 <video.mp4> <genre> <movie_name> <synopsis.txt> <subtitles.srt>"
+    echo "Usage: $0 <config_key>"
     echo ""
-    echo "Available genres: thriller, action, drama, horror, scifi, comedy, romance"
+    echo "Available keys in $CONFIG_FILE:"
+    if [ -f "$CONFIG_FILE" ]; then
+        yq '.movies | keys | .[]' "$CONFIG_FILE" 2>/dev/null | sed 's/^/  - /'
+    else
+        echo "  (config file not found)"
+    fi
     echo ""
     echo "Example:"
-    echo "  $0 movie.mp4 thriller \"Movie Title\" synopsis.txt movie.srt"
+    echo "  $0 hitch"
+    exit 1
+fi
+
+# Check if config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo -e "${RED}Error: Config file not found: $CONFIG_FILE${NC}"
+    exit 1
+fi
+
+# Check if yq is installed
+if ! command -v yq &> /dev/null; then
+    echo -e "${RED}Error: yq is not installed. Please install yq to parse YAML.${NC}"
+    echo "Install with: sudo apt install yq  OR  pip install yq"
+    exit 1
+fi
+
+# Check if key exists in config
+KEY_EXISTS=$(yq ".movies | has(\"$KEY\")" "$CONFIG_FILE")
+if [ "$KEY_EXISTS" != "true" ]; then
+    echo -e "${RED}Error: Key '$KEY' not found in $CONFIG_FILE${NC}"
     echo ""
-    echo "This script runs the SEMANTIC PIPELINE ONLY."
-    echo "Synopsis and subtitle files are REQUIRED for story understanding."
+    echo "Available keys:"
+    yq '.movies | keys | .[]' "$CONFIG_FILE" 2>/dev/null | sed 's/^/  - /'
+    exit 1
+fi
+
+# Extract configuration values using yq
+MOVIE_NAME=$(yq ".movies.$KEY.movie_name" "$CONFIG_FILE")
+VIDEO=$(yq ".movies.$KEY.video" "$CONFIG_FILE")
+SUBTITLES=$(yq ".movies.$KEY.subtitles" "$CONFIG_FILE")
+SYNOPSIS=$(yq ".movies.$KEY.synopsis" "$CONFIG_FILE")
+GENRE=$(yq ".movies.$KEY.genre" "$CONFIG_FILE")
+
+# Remove quotes if present (yq may add them)
+MOVIE_NAME=$(echo "$MOVIE_NAME" | sed 's/^"//;s/"$//')
+VIDEO=$(echo "$VIDEO" | sed 's/^"//;s/"$//')
+SUBTITLES=$(echo "$SUBTITLES" | sed 's/^"//;s/"$//')
+SYNOPSIS=$(echo "$SYNOPSIS" | sed 's/^"//;s/"$//')
+GENRE=$(echo "$GENRE" | sed 's/^"//;s/"$//')
+
+# Validate all required fields are present
+MISSING_FIELDS=""
+if [ -z "$MOVIE_NAME" ] || [ "$MOVIE_NAME" = "null" ]; then
+    MISSING_FIELDS="${MISSING_FIELDS}movie_name, "
+fi
+if [ -z "$VIDEO" ] || [ "$VIDEO" = "null" ]; then
+    MISSING_FIELDS="${MISSING_FIELDS}video, "
+fi
+if [ -z "$SUBTITLES" ] || [ "$SUBTITLES" = "null" ]; then
+    MISSING_FIELDS="${MISSING_FIELDS}subtitles, "
+fi
+if [ -z "$SYNOPSIS" ] || [ "$SYNOPSIS" = "null" ]; then
+    MISSING_FIELDS="${MISSING_FIELDS}synopsis, "
+fi
+if [ -z "$GENRE" ] || [ "$GENRE" = "null" ]; then
+    MISSING_FIELDS="${MISSING_FIELDS}genre, "
+fi
+
+if [ -n "$MISSING_FIELDS" ]; then
+    echo -e "${RED}Error: Missing required fields for key '$KEY': ${MISSING_FIELDS%, }${NC}"
     exit 1
 fi
 
@@ -64,13 +129,20 @@ if [ ! -f "$SUBTITLES" ]; then
     exit 1
 fi
 
+# Validate genre
+VALID_GENRES="thriller action drama horror scifi comedy romance"
+if ! echo "$VALID_GENRES" | grep -qw "$GENRE"; then
+    echo -e "${RED}Error: Invalid genre '$GENRE'. Valid genres: $VALID_GENRES${NC}"
+    exit 1
+fi
+
 # Header
 echo ""
 echo -e "${BLUE}╔════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║     GenreBender: Semantic Trailer Generator           ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${GREEN}Configuration:${NC}"
+echo -e "${GREEN}Configuration (key: $KEY):${NC}"
 echo "  Video:      $VIDEO"
 echo "  Genre:      $GENRE"
 echo "  Movie Name: $MOVIE_NAME"
@@ -162,6 +234,7 @@ OUTPUT_DIR="outputs/$SANITIZED"
 
 echo -e "${GREEN}Final Trailer:${NC} $OUTPUT_DIR/output/trailer_final.mp4"
 echo ""
+echo -e "${BLUE}Config Key:${NC} $KEY"
 echo -e "${BLUE}Pipeline:${NC} Semantic (Stages 1-5 → 11-12 → 13-15 → 9-10)"
 echo -e "${BLUE}Story Graph:${NC} outputs/story_graphs/$MOVIE_NAME/story_graph.json"
 echo -e "${BLUE}Beat Sheet:${NC} outputs/story_graphs/$MOVIE_NAME/beats.json"

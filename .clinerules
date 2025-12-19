@@ -15,7 +15,7 @@ GenreBender is a sophisticated system for automatically generating cinematic tra
 ```
 GenreBender/
 ├── main.py                           # Main pipeline orchestrator & CLI
-├── run.sh                            # Convenience script for running pipeline
+├── run_semantic_pipeline.sh          # Semantic pipeline orchestrator script
 ├── 1_shot_detection.py               # Stage 1 standalone script
 ├── 2_keyframe_extraction.py          # Stage 2 standalone script
 ├── 3_audio_extraction.py             # Stage 3 standalone script
@@ -146,8 +146,8 @@ python main.py --input movie.mp4 --genre comedy --force-stage genre_scoring --sk
 # Reset and start fresh
 python main.py --input movie.mp4 --genre thriller --reset-checkpoint
 
-# Using convenience script
-./run.sh movie.mp4 thriller
+# Using semantic pipeline script (requires synopsis and subtitles)
+./run_semantic_pipeline.sh movie.mp4 thriller "Movie Title" synopsis.txt movie.srt
 ```
 
 **Stage-by-Stage Execution:**
@@ -577,15 +577,17 @@ python 11_story_graph_generator.py \
 
 ## Shell Scripts
 
-### Main Pipeline
-- **run.sh**: Convenience wrapper for running main.py with common options
+### Semantic Pipeline
+- **run_semantic_pipeline.sh**: Full semantic pipeline orchestrator (Stages 1-5 → 11-12 → 13-15 → 9-10)
+  - Requires: video, genre, movie name, synopsis file, subtitle file
+  - Usage: `./run_semantic_pipeline.sh movie.mp4 thriller "Movie Title" synopsis.txt movie.srt`
 
 ### Qwen Server Management
 - **qwen_server/setup.sh**: First-time setup (venv, dependencies, model download)
 - **qwen_server/start_server.sh**: Start Qwen server (supports multiple instances)
 - **qwen_server/stop_server.sh**: Stop all running Qwen server instances
 
-Usage:
+**Qwen Server Usage:**
 ```bash
 # Setup (first time only)
 cd qwen_server && ./setup.sh
@@ -595,6 +597,13 @@ cd qwen_server && ./setup.sh
 
 # Stop server
 ./stop_server.sh
+```
+
+**Semantic Pipeline Usage:**
+```bash
+# Run complete semantic trailer generation
+./run_semantic_pipeline.sh test_files/hitch.mp4 thriller "Hitch" \
+  test_files/hitch_synopsis.txt test_files/hitch.srt
 ```
 
 ## Beat Sheet Generator - Stage 12 / Layer 2.2 (`12_beat_sheet_generator.py`)

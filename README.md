@@ -130,6 +130,35 @@ python main.py --input movie.mp4 --genre thriller --resume-from remote_analysis 
 python main.py --input movie.mp4 --genre comedy --force-stage genre_scoring --skip-clean
 ```
 
+### Semantic Pipeline Script
+
+For the full semantic trailer generation pipeline (which requires synopsis and subtitle files), use the convenience script:
+
+```bash
+./run_semantic_pipeline.sh <video.mp4> <genre> <movie_name> <synopsis.txt> <subtitles.srt>
+```
+
+**Arguments:**
+| Argument | Description |
+|----------|-------------|
+| `video.mp4` | Input video file |
+| `genre` | Target genre (thriller, action, drama, horror, scifi, comedy, romance) |
+| `movie_name` | Movie title (for story graph lookup) |
+| `synopsis.txt` | Path to synopsis text file |
+| `subtitles.srt` | Path to SRT subtitle file |
+
+**Example:**
+```bash
+./run_semantic_pipeline.sh test_files/hitch.mp4 thriller "Hitch" \
+  test_files/hitch_synopsis.txt test_files/hitch.srt
+```
+
+**Pipeline Flow:**
+1. **Phase 1**: Shot Detection & Multimodal Analysis (Stages 1-5)
+2. **Phase 2**: Story Understanding (Stages 11-12)
+3. **Phase 3**: Semantic Retrieval (Stages 13-15)
+4. **Phase 4**: Video & Audio Assembly (Stages 9-10)
+
 ## 📊 Output Structure
 
 ```
