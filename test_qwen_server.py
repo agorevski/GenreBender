@@ -16,50 +16,75 @@ API_KEY = "helloagorevski"
 SHOT_METADATA_PATH = "shots/shot_metadata.json"
 
 def load_shot_metadata() -> Dict:
-    """Load shot metadata from JSON file."""
+    """Load shot metadata from JSON file.
+
+    Reads the shot metadata JSON file from the configured path and
+    parses it into a dictionary.
+
+    Returns:
+        Dict: The parsed shot metadata containing shot information.
+
+    Raises:
+        FileNotFoundError: If the metadata file does not exist.
+        json.JSONDecodeError: If the file contains invalid JSON.
+    """
     with open(SHOT_METADATA_PATH, 'r') as f:
         return json.load(f)
 
 def encode_image_to_base64(image_path: str) -> str:
-    """
-    Encode an image file to base64 string.
-    
+    """Encode an image file to base64 string.
+
+    Reads the binary content of an image file and encodes it as a
+    base64 string suitable for JSON transmission.
+
     Args:
-        image_path: Path to image file
-        
+        image_path: Path to the image file to encode.
+
     Returns:
-        Base64 encoded string
+        str: Base64 encoded string representation of the image.
+
+    Raises:
+        FileNotFoundError: If the image file does not exist.
+        IOError: If the file cannot be read.
     """
     with open(image_path, 'rb') as f:
         image_data = f.read()
     return base64.b64encode(image_data).decode('utf-8')
 
 def encode_video_to_base64(video_path: str) -> str:
-    """
-    Encode a video file to base64 string.
-    
+    """Encode a video file to base64 string.
+
+    Reads the binary content of a video file and encodes it as a
+    base64 string suitable for JSON transmission.
+
     Args:
-        video_path: Path to video file
-        
+        video_path: Path to the video file to encode.
+
     Returns:
-        Base64 encoded string
+        str: Base64 encoded string representation of the video.
+
+    Raises:
+        FileNotFoundError: If the video file does not exist.
+        IOError: If the file cannot be read.
     """
     with open(video_path, 'rb') as f:
         video_data = f.read()
     return base64.b64encode(video_data).decode('utf-8')
 
 def extract_video_clip(input_video: str, start_time: float, end_time: float, output_path: str) -> bool:
-    """
-    Extract a video clip from a larger video file.
-    
+    """Extract a video clip from a larger video file.
+
+    Uses ffmpeg to extract a segment of video between the specified
+    start and end times without re-encoding (stream copy mode).
+
     Args:
-        input_video: Path to input video file
-        start_time: Start time in seconds
-        end_time: End time in seconds
-        output_path: Path for output clip
-        
+        input_video: Path to the input video file.
+        start_time: Start time of the clip in seconds.
+        end_time: End time of the clip in seconds.
+        output_path: Path where the extracted clip will be saved.
+
     Returns:
-        True if successful, False otherwise
+        bool: True if extraction was successful, False otherwise.
     """
     import subprocess
     
@@ -82,11 +107,13 @@ def extract_video_clip(input_video: str, start_time: float, end_time: float, out
         return False
 
 def test_health_check() -> bool:
-    """
-    Test the health check endpoint.
-    
+    """Test the health check endpoint.
+
+    Sends a GET request to the server's health endpoint to verify
+    that the Qwen2-VL server is running and responding correctly.
+
     Returns:
-        True if server is healthy, False otherwise
+        bool: True if the server is healthy and responding, False otherwise.
     """
     print("\n" + "=" * 60)
     print("Testing Health Check Endpoint")
@@ -120,14 +147,17 @@ def test_health_check() -> bool:
         return False
 
 def test_analyze_shot(shot: Dict) -> bool:
-    """
-    Test analyzing a single shot.
-    
+    """Test analyzing a single shot using keyframe images.
+
+    Encodes the shot's keyframe images to base64 and sends them to
+    the analysis endpoint for visual content analysis.
+
     Args:
-        shot: Shot data dictionary
-        
+        shot: Shot data dictionary containing 'id', 'keyframes',
+            'audio_features', 'start_time', 'end_time', and 'duration'.
+
     Returns:
-        True if analysis succeeded, False otherwise
+        bool: True if analysis succeeded, False otherwise.
     """
     print("\n" + "=" * 60)
     print("Testing Shot Analysis Endpoint")
@@ -236,15 +266,18 @@ def test_analyze_shot(shot: Dict) -> bool:
         return False
 
 def test_analyze_shot_video(shot: Dict, source_video: str) -> bool:
-    """
-    Test analyzing a single shot using video mode.
-    
+    """Test analyzing a single shot using video mode.
+
+    Extracts a video clip for the shot's time range, encodes it to
+    base64, and sends it to the analysis endpoint for processing.
+
     Args:
-        shot: Shot data dictionary
-        source_video: Path to source video file
-        
+        shot: Shot data dictionary containing 'id', 'start_time',
+            'end_time', 'duration', and optionally 'audio_features'.
+        source_video: Path to the source video file to extract clip from.
+
     Returns:
-        True if analysis succeeded, False otherwise
+        bool: True if analysis succeeded, False otherwise.
     """
     print("\n" + "=" * 60)
     print("Testing Shot Analysis Endpoint (VIDEO MODE)")
@@ -361,7 +394,15 @@ def test_analyze_shot_video(shot: Dict, source_video: str) -> bool:
             pass
 
 def main():
-    """Main test execution."""
+    """Main test execution entry point.
+
+    Parses command line arguments, loads shot metadata, runs health
+    checks, and executes analysis tests on shots. Supports both
+    keyframe and video analysis modes.
+
+    Returns:
+        int: Exit code (0 for success, 1 for failure).
+    """
     import argparse
     
     parser = argparse.ArgumentParser(description='Test Qwen2-VL server')

@@ -32,7 +32,16 @@ logger = logging.getLogger(__name__)
 STAGE_NAME = "timeline_construction"
 
 def parse_args():
-    """Parse command line arguments."""
+    """Parse command line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed command line arguments containing:
+            - input (str): Input video file path.
+            - genre (str): Target trailer genre.
+            - target_duration (int): Target trailer duration in seconds.
+            - force (bool): Force reconstruction flag.
+            - verbose (bool): Verbose logging flag.
+    """
     parser = argparse.ArgumentParser(
         description="Stage 15: Construct deterministic trailer timeline"
     )
@@ -70,11 +79,17 @@ def parse_args():
     return parser.parse_args()
 
 def validate_inputs(genre_output_dir: Path, args) -> Path:
-    """
-    Validate required input files exist.
-    
+    """Validate required input files exist.
+
+    Args:
+        genre_output_dir: Path to the genre-specific output directory.
+        args: Parsed command line arguments containing input and genre.
+
     Returns:
-        Path to selected_scenes.json
+        Path to the selected_scenes.json file.
+
+    Raises:
+        SystemExit: If selected scenes file does not exist.
     """
     # Check selected scenes (from stage 14) - now in genre-specific directory
     selected_scenes_path = genre_output_dir / 'selected_scenes.json'
@@ -90,7 +105,17 @@ def validate_inputs(genre_output_dir: Path, args) -> Path:
     return selected_scenes_path
 
 def main():
-    """Main execution function."""
+    """Main execution function for timeline construction stage.
+
+    Orchestrates the timeline construction pipeline:
+    1. Sets up logging and output directories.
+    2. Validates input files from previous stages.
+    3. Constructs a shot-level timeline with precise timings.
+    4. Saves results and updates checkpoint.
+
+    Returns:
+        int: Exit code (0 for success, 1 for failure).
+    """
     args = parse_args()
     
     # Setup

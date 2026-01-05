@@ -63,11 +63,13 @@ class SceneRetriever:
         logger.info(f"Scene retriever initialized with {len(scene_ids)} scenes")
     
     def _build_faiss_index(self) -> faiss.Index:
-        """
-        Build FAISS index for efficient similarity search.
+        """Build FAISS index for efficient similarity search.
         
         Uses IndexFlatIP (inner product) which is equivalent to cosine similarity
         when vectors are L2-normalized.
+        
+        Returns:
+            faiss.Index: FAISS index configured for inner product similarity search.
         """
         # Normalize embeddings for cosine similarity
         faiss.normalize_L2(self.scene_embeddings)
@@ -190,10 +192,18 @@ class SceneRetriever:
         semantic_similarity: float,
         target_genre: str
     ) -> float:
-        """
-        Calculate multi-factor score for beat-scene match.
+        """Calculate multi-factor score for beat-scene match.
         
         Score = w1*semantic + w2*emotion + w3*visual - w4*genre_penalty
+        
+        Args:
+            beat: Beat dictionary containing target emotion and visual requirements.
+            shot: Shot dictionary containing attributes and metadata.
+            semantic_similarity: Pre-computed cosine similarity from FAISS search.
+            target_genre: Target genre for the trailer transformation.
+        
+        Returns:
+            float: Weighted composite score between 0 and 1.
         """
         # Factor 1: Semantic similarity (from FAISS)
         semantic_score = semantic_similarity
@@ -231,10 +241,17 @@ class SceneRetriever:
         target_emotion: str,
         attributes: Dict
     ) -> float:
-        """
-        Calculate how well scene emotion matches beat emotion.
+        """Calculate how well scene emotion matches beat emotion.
         
-        Maps target emotions to relevant attribute values.
+        Maps target emotions to relevant attribute values using a predefined
+        emotion-to-attribute mapping.
+        
+        Args:
+            target_emotion: Desired emotional tone for the beat (e.g., 'suspense', 'fear').
+            attributes: Scene attribute dictionary with numeric scores.
+        
+        Returns:
+            float: Emotional alignment score between 0 and 1, with 0.5 as neutral.
         """
         if not target_emotion or not attributes:
             return 0.5  # Neutral score
@@ -273,10 +290,17 @@ class SceneRetriever:
         visual_requirements: List[str],
         attributes: Dict
     ) -> float:
-        """
-        Calculate how well scene attributes match visual requirements.
+        """Calculate how well scene attributes match visual requirements.
         
-        Performs keyword matching between requirements and attribute names.
+        Performs keyword matching between requirements and attribute names,
+        then averages the matched attribute scores.
+        
+        Args:
+            visual_requirements: List of visual requirement strings from the beat.
+            attributes: Scene attribute dictionary with numeric scores.
+        
+        Returns:
+            float: Visual match score between 0 and 1, with 0.5 as neutral.
         """
         if not visual_requirements or not attributes:
             return 0.5
@@ -310,10 +334,17 @@ class SceneRetriever:
         attributes: Dict,
         target_genre: str
     ) -> float:
-        """
-        Penalize scenes that strongly match the original (non-target) genre.
+        """Penalize scenes that strongly match the original (non-target) genre.
         
-        This helps select scenes that feel "off" or reinterpretable.
+        This helps select scenes that feel "off" or reinterpretable by avoiding
+        scenes with strong indicators of genres other than the target.
+        
+        Args:
+            attributes: Scene attribute dictionary with numeric scores.
+            target_genre: Target genre for the trailer transformation.
+        
+        Returns:
+            float: Genre penalty score between 0 and 1, where higher means more penalty.
         """
         # Genre indicator attributes (these often match original genre)
         genre_indicators = {

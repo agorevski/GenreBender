@@ -17,6 +17,21 @@ from trailer_generator.audio import AudioMixer
 from trailer_generator.narrative import AzureOpenAIClient
 
 def main():
+    """Run the audio mixing pipeline stage.
+
+    This function orchestrates Stage 10 of the trailer generation pipeline,
+    which adds music, sound effects, and audio ducking to create the final
+    trailer. It validates prerequisites, loads configuration and timeline,
+    initializes the audio mixer, and produces the final mixed trailer.
+
+    The function supports AI-powered music selection when configured with
+    Azure OpenAI, and allows manual music file specification via command
+    line arguments.
+
+    Raises:
+        SystemExit: If prerequisites are not met, required files are missing,
+            or audio mixing fails.
+    """
     parser = argparse.ArgumentParser(
         description='Stage 10: Audio Mixing - Add music and effects to create final trailer'
     )

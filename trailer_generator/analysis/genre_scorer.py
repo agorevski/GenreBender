@@ -26,20 +26,27 @@ class GenreScorer:
         self._validate_weights()
     
     def _validate_weights(self):
-        """Validate that weights sum to approximately 1.0"""
+        """Validate that weights sum to approximately 1.0.
+        
+        Logs a warning if the sum of genre weights deviates from 1.0
+        by more than 0.01.
+        """
         total = sum(self.genre_weights.values())
         if abs(total - 1.0) > 0.01:
             logger.warning(f"Genre weights sum to {total:.3f}, expected 1.0")
     
     def score_shot(self, shot: Dict) -> float:
-        """
-        Compute genre-specific score for a single shot.
+        """Compute genre-specific score for a single shot.
+        
+        Calculates a weighted score by multiplying each attribute value
+        by its corresponding genre weight and summing the results.
         
         Args:
-            shot: Shot dictionary with 'analysis' containing attributes
+            shot: Shot dictionary with 'analysis' containing attributes.
+                Expected structure: {'id': str, 'analysis': {'attributes': {...}}}
             
         Returns:
-            Weighted score between 0.0 and 1.0
+            float: Weighted score clamped between 0.0 and 1.0.
         """
         analysis = shot.get('analysis', {})
         attributes = analysis.get('attributes', {})
@@ -57,14 +64,16 @@ class GenreScorer:
         return max(0.0, min(1.0, score))  # Clamp to [0, 1]
     
     def score_shots(self, shots: List[Dict]) -> List[Dict]:
-        """
-        Compute scores for multiple shots.
+        """Compute scores for multiple shots.
+        
+        Iterates through all shots, computing genre-specific scores and
+        logging the score distribution statistics.
         
         Args:
-            shots: List of shot dictionaries
+            shots: List of shot dictionaries to score.
             
         Returns:
-            Updated shots list with 'score' field
+            list: The same shots list with 'score' field added to each shot.
         """
         logger.info(f"Scoring {len(shots)} shots with genre weights")
         
@@ -82,15 +91,23 @@ class GenreScorer:
         return shots
     
     def get_score_distribution(self, shots: List[Dict], bins: int = 10) -> Dict:
-        """
-        Get distribution of scores across shots.
+        """Get distribution of scores across shots.
+        
+        Creates a histogram of score values to analyze the distribution
+        of scores across all shots.
         
         Args:
-            shots: List of scored shots
-            bins: Number of histogram bins
+            shots: List of scored shots containing 'score' field.
+            bins: Number of histogram bins. Defaults to 10.
             
         Returns:
-            Dictionary with distribution statistics
+            dict: Dictionary with distribution statistics containing:
+                - bins (list): Bin edge values.
+                - counts (list): Count of shots in each bin.
+                - min (float): Minimum score.
+                - max (float): Maximum score.
+                - mean (float): Average score.
+                - total_shots (int): Total number of scored shots.
         """
         scores = [s.get('score', 0.0) for s in shots]
         
@@ -125,14 +142,17 @@ class GenreScorer:
         }
     
     def get_top_attributes(self, shot: Dict) -> List[tuple]:
-        """
-        Get top contributing attributes for a shot's score.
+        """Get top contributing attributes for a shot's score.
+        
+        Analyzes which attributes contributed most to a shot's final score
+        by computing the weighted contribution of each attribute.
         
         Args:
-            shot: Shot dictionary with analysis
+            shot: Shot dictionary with analysis containing attributes.
             
         Returns:
-            List of (attribute, contribution) tuples, sorted by contribution
+            list: List of (attribute_name, contribution) tuples, sorted
+                by contribution in descending order.
         """
         analysis = shot.get('analysis', {})
         attributes = analysis.get('attributes', {})

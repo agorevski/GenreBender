@@ -17,22 +17,30 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 logger = logging.getLogger(__name__)
 
 class RemoteAnalyzer:
-    """
-    Client for communicating with Qwen2-VL server for multimodal shot analysis.
-    Supports batch processing, retries, and network resilience.
+    """Client for Qwen2-VL server multimodal shot analysis.
+
+    Communicates with an external Qwen2-VL server to perform shot analysis.
+    Supports batch processing, automatic retries with exponential backoff,
+    and network resilience.
+
+    Attributes:
+        server_url: Base URL of the Qwen2-VL server.
+        timeout: Request timeout in seconds.
+        max_retries: Maximum number of retry attempts for failed requests.
+        batch_size: Number of shots to analyze per batch request.
+        api_key: Optional API key for server authentication.
     """
     
     def __init__(self, server_url: str, timeout: int = 30, max_retries: int = 3,
                  batch_size: int = 10, api_key: Optional[str] = None):
-        """
-        Initialize remote analyzer.
-        
+        """Initialize the remote analyzer client.
+
         Args:
-            server_url: URL of Qwen2-VL server
-            timeout: Request timeout in seconds
-            max_retries: Maximum number of retry attempts
-            batch_size: Number of shots to analyze per batch request
-            api_key: API key for server authentication
+            server_url: URL of the Qwen2-VL server (trailing slash is removed).
+            timeout: Request timeout in seconds. Defaults to 30.
+            max_retries: Maximum number of retry attempts. Defaults to 3.
+            batch_size: Number of shots to analyze per batch. Defaults to 10.
+            api_key: Optional API key for server authentication.
         """
         self.server_url = server_url.rstrip('/')
         self.timeout = timeout
@@ -45,15 +53,24 @@ class RemoteAnalyzer:
         }
     
     def analyze_shot(self, shot: Dict, video_path: str) -> Dict:
-        """
-        Analyze a single shot using remote Qwen2-VL server.
-        
+        """Analyze a single shot using remote Qwen2-VL server.
+
+        Encodes keyframe images as base64 and sends them to the remote server
+        for multimodal analysis. Includes retry logic with exponential backoff.
+
         Args:
-            shot: Shot dictionary with keyframe paths and audio features
-            video_path: Path to source video (for audio extraction)
-            
+            shot: Shot dictionary containing keyframe paths, audio features,
+                and timing information (start_time, end_time, duration).
+            video_path: Path to source video file (used for context).
+
         Returns:
-            Analysis dictionary with caption and attributes
+            Dict: Analysis results containing:
+                - caption (str): Descriptive caption for the shot.
+                - attributes (Dict[str, float]): Numeric scores for various
+                  visual and emotional attributes like suspense, intensity, etc.
+
+        Raises:
+            No exceptions are raised; errors return an empty analysis structure.
         """
         # Get keyframes (multiple frames or single frame)
         keyframe_paths = shot.get('keyframes', [])
@@ -123,15 +140,24 @@ class RemoteAnalyzer:
         return self._empty_analysis()
     
     def analyze_batch(self, shots: List[Dict], video_path: str) -> List[Dict]:
-        """
-        Analyze multiple shots in a single batch request.
-        
+        """Analyze multiple shots in a single batch request.
+
+        Processes shots in bulk for efficiency. Validates and encodes all
+        keyframes, then sends a single batch request to the server. Falls
+        back to individual shot analysis if the batch request fails.
+
         Args:
-            shots: List of shot dictionaries
-            video_path: Path to source video
-            
+            shots: List of shot dictionaries, each containing keyframe paths,
+                audio features, and timing information.
+            video_path: Path to source video file.
+
         Returns:
-            List of shots with analysis results
+            List[Dict]: The input shots list with an 'analysis' key added to
+            each shot containing caption and attribute scores.
+
+        Note:
+            Shots with missing or invalid keyframes are skipped and receive
+            an empty analysis structure.
         """
         logger.info(f"Analyzing batch of {len(shots)} shots (batch_size config: {self.batch_size})")
         
@@ -259,15 +285,23 @@ class RemoteAnalyzer:
         return shots
     
     async def analyze_batch_async(self, shots: List[Dict], video_path: str) -> List[Dict]:
-        """
-        Analyze batch asynchronously for better performance.
-        
+        """Analyze batch asynchronously for better performance.
+
+        Uses aiohttp for non-blocking HTTP requests, allowing better
+        concurrency when processing multiple batches. Falls back to
+        synchronous batch analysis if async request fails.
+
         Args:
-            shots: List of shot dictionaries
-            video_path: Path to source video
-            
+            shots: List of shot dictionaries, each containing keyframe paths,
+                audio features, and timing information.
+            video_path: Path to source video file.
+
         Returns:
-            List of shots with analysis results
+            List[Dict]: The input shots list with an 'analysis' key added to
+            each shot containing caption and attribute scores.
+
+        Note:
+            This method should be called within an async context (event loop).
         """
         logger.info(f"Analyzing batch of {len(shots)} shots (async)")
         
@@ -378,11 +412,14 @@ class RemoteAnalyzer:
         return self.analyze_batch(shots, video_path)
     
     def _empty_analysis(self) -> Dict:
-        """
-        Return empty analysis structure for failed requests.
-        
+        """Return empty analysis structure for failed requests.
+
+        Provides a default analysis dictionary with zeroed attribute scores
+        when server requests fail or shots cannot be processed.
+
         Returns:
-            Dictionary with default values
+            Dict: Analysis structure with 'caption' set to 'Analysis failed'
+            and all attribute scores set to 0.0.
         """
         return {
             'caption': 'Analysis failed',
@@ -413,11 +450,13 @@ class RemoteAnalyzer:
         }
     
     def health_check(self) -> bool:
-        """
-        Check if remote server is available.
-        
+        """Check if remote server is available.
+
+        Sends a GET request to the server's /health endpoint to verify
+        connectivity and server status.
+
         Returns:
-            True if server is responding
+            bool: True if server responds with HTTP 200, False otherwise.
         """
         try:
             response = requests.get(
@@ -432,24 +471,34 @@ class RemoteAnalyzer:
 
 
 class MultiServerAnalyzer:
-    """
-    Multi-server analyzer that distributes workload across multiple Qwen2-VL servers.
-    Enables true multi-GPU parallelism with one server per GPU.
+    """Multi-server analyzer for distributed Qwen2-VL workloads.
+
+    Distributes shot analysis workload across multiple Qwen2-VL servers,
+    enabling true multi-GPU parallelism with one server per GPU. Supports
+    round-robin and random load balancing strategies.
+
+    Attributes:
+        server_urls: List of server URLs (one per GPU).
+        load_balancing: Load balancing strategy ('round_robin' or 'random').
+        analyzers: List of RemoteAnalyzer instances, one per server.
     """
     
     def __init__(self, server_urls: List[str], load_balancing: str = "round_robin",
                  timeout: int = 30, max_retries: int = 3, batch_size: int = 10,
                  api_key: Optional[str] = None):
-        """
-        Initialize multi-server analyzer.
-        
+        """Initialize the multi-server analyzer.
+
+        Creates a RemoteAnalyzer instance for each server URL provided,
+        enabling parallel processing across multiple servers/GPUs.
+
         Args:
-            server_urls: List of server URLs (one per GPU)
-            load_balancing: Load balancing strategy ('round_robin' or 'random')
-            timeout: Request timeout in seconds
-            max_retries: Maximum number of retry attempts
-            batch_size: Number of shots per batch request
-            api_key: API key for server authentication
+            server_urls: List of server URLs (typically one per GPU).
+            load_balancing: Load balancing strategy. Supported values:
+                'round_robin' (default) or 'random'.
+            timeout: Request timeout in seconds. Defaults to 30.
+            max_retries: Maximum number of retry attempts. Defaults to 3.
+            batch_size: Number of shots per batch request. Defaults to 10.
+            api_key: Optional API key for server authentication.
         """
         self.server_urls = server_urls
         self.load_balancing = load_balancing
@@ -471,11 +520,14 @@ class MultiServerAnalyzer:
         logger.info(f"Load balancing strategy: {load_balancing}")
     
     def _select_server(self) -> RemoteAnalyzer:
-        """
-        Select next server based on load balancing strategy.
-        
+        """Select next server based on load balancing strategy.
+
+        Chooses a server using the configured load balancing strategy:
+        'round_robin' cycles through servers sequentially, 'random'
+        selects a server randomly.
+
         Returns:
-            RemoteAnalyzer instance
+            RemoteAnalyzer: The selected analyzer instance for the next request.
         """
         if self.load_balancing == "round_robin":
             analyzer = self.analyzers[self.current_idx]
@@ -488,14 +540,17 @@ class MultiServerAnalyzer:
             return self._select_server()
     
     def _split_shots(self, shots: List[Dict]) -> List[List[Dict]]:
-        """
-        Split shots into N chunks (one per server).
-        
+        """Split shots into N chunks (one per server).
+
+        Distributes shots evenly across available servers. Remainder shots
+        are distributed across the first few chunks to ensure balanced loads.
+
         Args:
-            shots: List of shot dictionaries
-            
+            shots: List of shot dictionaries to distribute.
+
         Returns:
-            List of shot chunks
+            List[List[Dict]]: List of shot chunks, one per server. Some chunks
+            may be empty if there are fewer shots than servers.
         """
         num_servers = len(self.analyzers)
         chunk_size = len(shots) // num_servers
@@ -513,15 +568,22 @@ class MultiServerAnalyzer:
         return chunks
     
     def analyze_batch(self, shots: List[Dict], video_path: str) -> List[Dict]:
-        """
-        Analyze shots by distributing across all servers in parallel.
-        
+        """Analyze shots by distributing across all servers in parallel.
+
+        Splits the shot list into chunks and distributes them across all
+        available servers using ThreadPoolExecutor for true parallel processing.
+        Results are collected as each server completes its batch.
+
         Args:
-            shots: List of shot dictionaries
-            video_path: Path to source video
-            
+            shots: List of shot dictionaries to analyze.
+            video_path: Path to source video file.
+
         Returns:
-            List of shots with analysis results
+            List[Dict]: All shots with 'analysis' keys added, containing
+            caption and attribute scores from the remote analysis.
+
+        Note:
+            Failed chunks receive empty analysis structures for their shots.
         """
         num_shots = len(shots)
         num_servers = len(self.analyzers)
@@ -565,11 +627,14 @@ class MultiServerAnalyzer:
         return results
     
     def health_check(self) -> bool:
-        """
-        Check if all servers are available.
-        
+        """Check if all servers are available.
+
+        Iterates through all configured servers and checks their health
+        endpoints. Logs the status of each server.
+
         Returns:
-            True if all servers are responding
+            bool: True if all servers respond successfully, False if any
+            server fails the health check.
         """
         logger.info(f"Health checking {len(self.analyzers)} servers...")
         
@@ -585,11 +650,14 @@ class MultiServerAnalyzer:
         return all_healthy
     
     def _empty_analysis(self) -> Dict:
-        """
-        Return empty analysis structure for failed requests.
-        
+        """Return empty analysis structure for failed requests.
+
+        Provides a default analysis dictionary with zeroed attribute scores
+        when multi-server requests fail or chunks cannot be processed.
+
         Returns:
-            Dictionary with default values
+            Dict: Analysis structure with 'caption' set to 'Analysis failed'
+            and all attribute scores set to 0.0.
         """
         return {
             'caption': 'Analysis failed',

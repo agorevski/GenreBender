@@ -27,15 +27,15 @@ except ImportError:
 
 
 def _empty_features_static(n_mfcc: int = 13) -> Dict:
-    """
-    Return empty feature structure for failed extractions.
+    """Return empty feature structure for failed extractions.
+    
     Static version for use in parallel processing.
     
     Args:
-        n_mfcc: Number of MFCC coefficients
+        n_mfcc: Number of MFCC coefficients.
         
     Returns:
-        Dictionary with default/zero values
+        Dict: Dictionary with default/zero values for all feature keys.
     """
     return {
         'mfcc_mean': [0.0] * n_mfcc,
@@ -56,21 +56,22 @@ def _empty_features_static(n_mfcc: int = 13) -> Dict:
 def _extract_shot_features_worker(shm_name: str, audio_shape: tuple, audio_dtype: str,
                                    sr: int, start_time: float, end_time: float,
                                    n_mfcc: int = 13) -> Dict:
-    """
-    Worker function for parallel audio feature extraction using shared memory.
+    """Worker function for parallel audio feature extraction using shared memory.
+    
     This must be a module-level function to be picklable for multiprocessing.
     
     Args:
-        shm_name: Name of shared memory block containing audio data
-        audio_shape: Shape of the audio array
-        audio_dtype: Data type of the audio array
-        sr: Sample rate
-        start_time: Shot start time in seconds
-        end_time: Shot end time in seconds
-        n_mfcc: Number of MFCC coefficients to extract
+        shm_name: Name of shared memory block containing audio data.
+        audio_shape: Shape of the audio array.
+        audio_dtype: Data type of the audio array.
+        sr: Sample rate.
+        start_time: Shot start time in seconds.
+        end_time: Shot end time in seconds.
+        n_mfcc: Number of MFCC coefficients to extract.
         
     Returns:
-        Dictionary of audio features
+        Dict: Dictionary of audio features including MFCC, spectral, and
+            temporal features.
     """
     try:
         # Attach to shared memory
@@ -146,13 +147,12 @@ class AudioExtractor:
     """
     
     def __init__(self, sample_rate: int = 22050, n_mfcc: int = 13, max_workers: Optional[int] = None):
-        """
-        Initialize audio extractor.
+        """Initialize audio extractor.
         
         Args:
-            sample_rate: Target sample rate for audio processing
-            n_mfcc: Number of MFCC coefficients to extract
-            max_workers: Maximum number of parallel workers (default: cpu_count - 1)
+            sample_rate: Target sample rate for audio processing.
+            n_mfcc: Number of MFCC coefficients to extract.
+            max_workers: Maximum number of parallel workers. Defaults to cpu_count - 1.
         """
         self.sample_rate = sample_rate
         self.n_mfcc = n_mfcc
@@ -162,15 +162,14 @@ class AudioExtractor:
             logger.error("librosa is not installed. Install with: pip install librosa soundfile")
     
     def extract_audio_features(self, video_path: str, shots: List[Dict]) -> List[Dict]:
-        """
-        Extract audio features for all shots in the video using parallel processing.
+        """Extract audio features for all shots in the video using parallel processing.
         
         Args:
-            video_path: Path to source video
-            shots: List of shot dictionaries with timing information
+            video_path: Path to source video.
+            shots: List of shot dictionaries with timing information.
             
         Returns:
-            Updated shots list with audio features
+            List[Dict]: Updated shots list with audio features.
         """
         if not LIBROSA_AVAILABLE:
             logger.warning("Skipping audio extraction (librosa not available)")
@@ -254,14 +253,15 @@ class AudioExtractor:
         return shots
     
     def _extract_audio_from_video(self, video_path: str) -> tuple[Optional[np.ndarray], Optional[int]]:
-        """
-        Extract audio track from video file using ffmpeg.
+        """Extract audio track from video file using ffmpeg.
         
         Args:
-            video_path: Path to source video
+            video_path: Path to source video.
             
         Returns:
-            Tuple of (audio_data, sample_rate) or (None, None) if failed
+            tuple[Optional[np.ndarray], Optional[int]]: A tuple containing:
+                - audio_data: NumPy array of audio samples, or None if failed.
+                - sample_rate: The sample rate of the audio, or None if failed.
         """
         try:
             # Create temporary WAV file
@@ -308,17 +308,17 @@ class AudioExtractor:
     
     def _extract_shot_features(self, audio_data: np.ndarray, sr: int,
                                start_time: float, end_time: float) -> Optional[Dict]:
-        """
-        Extract audio features for a specific time segment.
+        """Extract audio features for a specific time segment.
         
         Args:
-            audio_data: Full audio array
-            sr: Sample rate
-            start_time: Shot start time in seconds
-            end_time: Shot end time in seconds
+            audio_data: Full audio array.
+            sr: Sample rate.
+            start_time: Shot start time in seconds.
+            end_time: Shot end time in seconds.
             
         Returns:
-            Dictionary of audio features or None if failed
+            Optional[Dict]: Dictionary of audio features including MFCC, spectral,
+                and temporal features, or None if extraction failed.
         """
         try:
             # Extract audio segment for this shot
@@ -379,23 +379,22 @@ class AudioExtractor:
             return self._empty_features()
     
     def _empty_features(self) -> Dict:
-        """
-        Return empty feature structure for failed extractions.
+        """Return empty feature structure for failed extractions.
         
         Returns:
-            Dictionary with default/zero values
+            Dict: Dictionary with default/zero values for all feature keys.
         """
         return _empty_features_static(self.n_mfcc)
     
     def extract_audio_summary(self, audio_features: Dict) -> Dict:
-        """
-        Create a compact summary of audio features for analysis.
+        """Create a compact summary of audio features for analysis.
         
         Args:
-            audio_features: Full audio feature dictionary
+            audio_features: Full audio feature dictionary.
             
         Returns:
-            Compact summary dictionary
+            Dict: Compact summary dictionary containing audio_type, intensity,
+                brightness, and tempo.
         """
         if not audio_features:
             return {'audio_type': 'silent', 'intensity': 0.0}

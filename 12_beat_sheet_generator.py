@@ -40,7 +40,17 @@ from trailer_generator.narrative.azure_client import AzureOpenAIClient
 from trailer_generator.narrative.beat_sheet_generator import BeatSheetGenerator
 
 def parse_arguments():
-    """Parse command line arguments."""
+    """Parse command line arguments for beat sheet generation.
+
+    Returns:
+        argparse.Namespace: Parsed arguments containing:
+            - movie_name (str): Movie name matching Stage 11 story graph directory.
+            - genre (str): Target genre for trailer (e.g., 'thriller', 'horror').
+            - output_dir (Path or None): Custom output directory path.
+            - force (bool): Whether to force regeneration if beats.json exists.
+            - temperature (float or None): LLM temperature override.
+            - validate_only (bool): Whether to only validate inputs without generating.
+    """
     parser = argparse.ArgumentParser(
         description="Stage 12: Generate genre-specific trailer beat sheet from story graph",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -106,16 +116,16 @@ Available Genres:
     return parser.parse_args()
 
 def validate_inputs(story_graph_path: Path, movie_name: str) -> None:
-    """
-    Validate that required inputs exist.
-    
+    """Validate that required inputs exist and story graph structure is valid.
+
     Args:
-        story_graph_path: Path to story_graph.json
-        movie_name: Movie name
-    
+        story_graph_path: Path to the story_graph.json file from Stage 11.
+        movie_name: Movie name used for error messaging.
+
     Raises:
-        FileNotFoundError: If inputs don't exist
-        ValueError: If story graph is invalid
+        FileNotFoundError: If the story graph file does not exist.
+        ValueError: If the story graph is missing required fields (title, logline,
+            characters, plot_structure, scene_timeline).
     """
     if not story_graph_path.exists():
         raise FileNotFoundError(
@@ -136,7 +146,23 @@ def validate_inputs(story_graph_path: Path, movie_name: str) -> None:
     logging.info(f"✓ Story graph validated: {story_graph.get('title')}")
 
 def main():
-    """Main execution."""
+    """Main execution for Stage 12 beat sheet generation.
+
+    Orchestrates the complete beat sheet generation workflow:
+        1. Parses command line arguments and loads configuration.
+        2. Validates story graph inputs from Stage 11.
+        3. Initializes Azure OpenAI client and beat sheet generator.
+        4. Generates genre-specific beat sheet with embedding prompts.
+        5. Saves outputs (beats, genre rewrite, metadata) to output directory.
+
+    Returns:
+        int: Exit code (0 for success, 1 for failure).
+
+    Raises:
+        FileNotFoundError: If required input files are missing.
+        ValueError: If story graph validation fails.
+        Exception: For any other generation failures.
+    """
     args = parse_arguments()
     
     # Load configuration

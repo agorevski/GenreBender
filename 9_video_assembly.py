@@ -18,6 +18,19 @@ from trailer_generator.assembly import VideoAssembler
 from trailer_generator.narrative import AzureOpenAIClient
 
 def main():
+    """Assemble final trailer video from timeline with genre-specific color grading.
+
+    This function orchestrates the video assembly pipeline stage, including:
+    - Validating prerequisite stages are completed
+    - Loading timeline and shot metadata
+    - Initializing Azure OpenAI client for AI features (titles/transitions)
+    - Assembling video with optional color grading and transitions
+    - Recording completion in checkpoint system
+
+    Raises:
+        SystemExit: If prerequisite stages are not completed, timeline is missing,
+            or video assembly fails.
+    """
     parser = argparse.ArgumentParser(
         description='Stage 9: Video Assembly - Create final trailer video with color grading'
     )

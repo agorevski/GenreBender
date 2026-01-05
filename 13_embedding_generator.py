@@ -33,7 +33,16 @@ STAGE_NAME = "embedding_generation"
 
 
 def parse_args():
-    """Parse command line arguments."""
+    """Parse command line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed arguments containing:
+            - input (str): Input video file path.
+            - genre (str): Target trailer genre.
+            - movie_name (str | None): Optional movie name for story graph lookup.
+            - force (bool): Whether to force regeneration.
+            - verbose (bool): Whether to enable verbose logging.
+    """
     parser = argparse.ArgumentParser(description="Stage 13: Generate embeddings for semantic scene retrieval")
     parser.add_argument('--input', type=str, required=True, help='Input video file path')
     parser.add_argument('--genre', type=str, required=True, 
@@ -47,11 +56,22 @@ def parse_args():
 
 
 def validate_inputs(args, output_dir: Path) -> tuple:
-    """
-    Validate required input files exist.
-    
+    """Validate required input files exist.
+
+    Checks that shot metadata and beat sheet files exist. Story graph is optional.
+
+    Args:
+        args: Parsed command line arguments containing input, genre, and movie_name.
+        output_dir: Base output directory path where shot metadata is located.
+
     Returns:
-        Tuple of (shot_metadata_path, beats_path, story_graph_path)
+        tuple: A tuple containing:
+            - shot_metadata_path (Path): Path to the shot metadata JSON file.
+            - beats_path (Path): Path to the genre-specific beat sheet JSON file.
+            - story_graph_path (Path | None): Path to story graph, or None if not found.
+
+    Raises:
+        SystemExit: If shot metadata or beat sheet files are not found.
     """
     # Check shot metadata (from stages 1-5)
     shot_metadata_path = output_dir / 'shots' / 'shot_metadata.json'
@@ -92,7 +112,19 @@ def validate_inputs(args, output_dir: Path) -> tuple:
 
 
 def main():
-    """Main execution function."""
+    """Main execution function for Stage 13 embedding generation.
+
+    Orchestrates the embedding generation pipeline:
+        1. Parses command line arguments.
+        2. Initializes the stage with checkpoint tracking.
+        3. Validates required input files.
+        4. Loads configuration and initializes Azure OpenAI client.
+        5. Generates scene and beat embeddings.
+        6. Marks stage as complete in checkpoint.
+
+    Returns:
+        int: Exit code (0 for success, 1 for failure).
+    """
     args = parse_args()
     
     # Initialize stage with checkpoint (genre-dependent stage)

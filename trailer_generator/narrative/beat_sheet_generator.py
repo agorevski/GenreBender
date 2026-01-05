@@ -132,15 +132,16 @@ Requirements:
         min_beats: int = 8,
         max_beats: int = 12
     ):
-        """
-        Initialize beat sheet generator.
-        
+        """Initialize beat sheet generator.
+
         Args:
-            azure_client: AzureOpenAIClient instance
-            genre_profiles_path: Path to genre_profiles.yaml (None = use default)
-            temperature: Sampling temperature for generation
-            min_beats: Minimum number of beats (default: 8)
-            max_beats: Maximum number of beats (default: 12)
+            azure_client: AzureOpenAIClient instance for LLM calls.
+            genre_profiles_path: Path to genre_profiles.yaml. If None, uses
+                the default path in config directory.
+            temperature: Sampling temperature for generation. Higher values
+                produce more creative outputs.
+            min_beats: Minimum number of beats allowed in beat sheet.
+            max_beats: Maximum number of beats allowed in beat sheet.
         """
         self.azure_client = azure_client
         self.temperature = temperature
@@ -165,22 +166,30 @@ Requirements:
         output_dir: Optional[Path] = None,
         genre_rewrite_filename: Optional[str] = None
     ) -> Dict:
-        """
-        Generate complete beat sheet from story graph.
-        
+        """Generate complete beat sheet from story graph.
+
+        Performs two-stage LLM processing: genre reinterpretation followed
+        by beat sheet generation. Optionally saves intermediate outputs.
+
         Args:
-            story_graph: Story graph dictionary from Stage 11
-            target_genre: Target genre for trailer
-            output_dir: Optional directory to save intermediate outputs
-            genre_rewrite_filename: Optional filename for genre_rewrite output 
-                                   (default: genre_rewrite.json, use genre_rewrite_{genre}.json for multi-genre)
-        
+            story_graph: Story graph dictionary from Stage 11 containing
+                title, characters, plot structure, and scene timeline.
+            target_genre: Target genre for trailer (must exist in genre_profiles).
+            output_dir: Optional directory to save intermediate outputs.
+                If provided, saves genre_rewrite.json.
+            genre_rewrite_filename: Optional filename for genre_rewrite output.
+                Defaults to 'genre_rewrite.json'. Use 'genre_rewrite_{genre}.json'
+                for multi-genre workflows.
+
         Returns:
-            Dictionary with 'beats' and 'embeddings' (placeholder for now)
-        
+            Dict: Dictionary containing:
+                - genre_rewrite: Genre reinterpretation from Stage 1.
+                - beat_sheet: Beat sheet with 8-12 beats from Stage 2.
+                - embeddings: Placeholder list for embedding vectors.
+
         Raises:
-            ValueError: If target genre not supported
-            Exception: If LLM generation fails
+            ValueError: If target genre is not supported.
+            Exception: If LLM generation or JSON parsing fails.
         """
         # Validate genre
         if target_genre not in self.genre_profiles:
@@ -230,15 +239,29 @@ Requirements:
         story_graph: Dict,
         target_genre: str
     ) -> Dict:
-        """
-        Stage 1: Reinterpret the story in the target genre.
-        
+        """Reinterpret the story in the target genre (Stage 1).
+
+        Uses LLM to reframe the movie concept in the target genre while
+        preserving core plot and characters. Changes tone, emotional framing,
+        pacing, genre tropes, and implied meaning.
+
         Args:
-            story_graph: Story graph dictionary
-            target_genre: Target genre
-        
+            story_graph: Story graph dictionary containing title, characters,
+                plot structure, and scene timeline.
+            target_genre: Target genre for reinterpretation.
+
         Returns:
-            Genre rewrite dictionary
+            Dict: Genre rewrite dictionary containing:
+                - new_genre: The target genre name.
+                - logline: Genre-specific pitch reframing the story.
+                - primary_conflict: Core tension reframed for new genre.
+                - antagonistic_forces: List of threats/obstacles in genre terms.
+                - genre_motifs: Recurring symbols and thematic elements.
+                - tone_profile: Pace, visual tone, and sound profile.
+                - emotional_arc_transformed: Four-phase emotional journey.
+
+        Raises:
+            Exception: If LLM response is empty or JSON parsing fails.
         """
         # Build genre context from profile
         genre_profile = self.genre_profiles[target_genre]
@@ -288,15 +311,28 @@ Requirements:
         genre_rewrite: Dict,
         target_genre: str
     ) -> Dict:
-        """
-        Stage 2: Generate beat sheet from genre reinterpretation.
-        
+        """Generate beat sheet from genre reinterpretation (Stage 2).
+
+        Uses LLM to convert genre reinterpretation into 8-12 trailer beats
+        following standard trailer structure: hook → setup → conflict →
+        escalation → climax tease.
+
         Args:
-            genre_rewrite: Genre rewrite from Stage 1
-            target_genre: Target genre
-        
+            genre_rewrite: Genre rewrite dictionary from Stage 1 containing
+                logline, conflicts, motifs, and emotional arc.
+            target_genre: Target genre for beat generation.
+
         Returns:
-            Beat sheet dictionary
+            Dict: Beat sheet dictionary containing:
+                - target_genre: The genre name.
+                - target_duration: Target trailer duration (90 seconds).
+                - beat_count: Number of beats generated.
+                - beats: List of beat objects with id, name, description,
+                    target_emotion, visual_requirements, audio_cue,
+                    voiceover, and embedding_prompt.
+
+        Raises:
+            Exception: If LLM response is empty or JSON parsing fails.
         """
         # Build messages
         user_prompt = self.BEAT_SHEET_USER_TEMPLATE.format(
@@ -334,15 +370,19 @@ Requirements:
             raise Exception(f"Failed to parse beat sheet response: {e}")
     
     def _build_genre_context(self, genre_profile: Dict, genre_name: str) -> str:
-        """
-        Build genre context string from profile.
-        
+        """Build genre context string from profile.
+
+        Extracts key information from genre profile to provide context
+        for the LLM during genre reinterpretation.
+
         Args:
-            genre_profile: Genre profile dictionary
-            genre_name: Genre name
-        
+            genre_profile: Genre profile dictionary containing scoring_weights,
+                pacing, music_tags, and color_grade settings.
+            genre_name: Human-readable genre name.
+
         Returns:
-            Formatted genre context string
+            str: Formatted multi-line string containing genre name,
+                key attributes, pacing style, audio mood, and visual style.
         """
         context_parts = [f"Genre: {genre_name}"]
         
@@ -366,14 +406,26 @@ Requirements:
         return "\n".join(context_parts)
     
     def _compact_story_graph(self, story_graph: Dict) -> Dict:
-        """
-        Create compact version of story graph for LLM prompt.
-        
+        """Create compact version of story graph for LLM prompt.
+
+        Reduces story graph size to fit within LLM context limits by
+        keeping only essential fields and sampling scenes.
+
         Args:
-            story_graph: Full story graph
-        
+            story_graph: Full story graph dictionary containing all
+                characters, scenes, and metadata.
+
         Returns:
-            Compact story graph with essential fields
+            Dict: Compact story graph containing:
+                - title: Movie title.
+                - logline: Story logline.
+                - characters: Top 5 characters with name, description,
+                    and up to 3 motivations each.
+                - major_themes: List of major themes.
+                - plot_structure: Plot structure data.
+                - emotional_arc: Emotional arc data.
+                - scene_summary: Sampled scenes (beginning, middle, end)
+                    with truncated summaries.
         """
         # Keep essential fields only
         compact = {
@@ -415,14 +467,23 @@ Requirements:
         return compact
     
     def _validate_beat_sheet(self, beat_sheet: Dict) -> None:
-        """
-        Validate beat sheet structure and content.
-        
+        """Validate beat sheet structure and content.
+
+        Checks that beat sheet contains required fields, has correct
+        beat count, and each beat has all required fields with proper
+        visual_requirements count.
+
         Args:
-            beat_sheet: Beat sheet dictionary
-        
+            beat_sheet: Beat sheet dictionary to validate, containing
+                a 'beats' list with beat objects.
+
         Raises:
-            ValueError: If validation fails
+            ValueError: If 'beats' field is missing, beat count is outside
+                valid range, any beat is missing required fields, or
+                visual_requirements count is not 3-5.
+
+        Warns:
+            Logs a warning if embedding_prompt is shorter than 50 words.
         """
         # Check required fields
         if "beats" not in beat_sheet:
@@ -468,17 +529,22 @@ Requirements:
         logger.info(f"Beat sheet validation passed: {len(beats)} beats")
     
     def _generate_embeddings(self, beat_sheet: Dict) -> List:
-        """
-        Generate embeddings from beat embedding_prompts.
-        
-        TODO: Implement actual embedding generation for Layer 2.3
-        Currently returns empty placeholder arrays.
-        
+        """Generate embeddings from beat embedding_prompts.
+
+        Creates embedding vectors from each beat's embedding_prompt for
+        use in Layer 2.3 semantic scene retrieval.
+
+        Note:
+            Currently returns placeholder empty arrays. Actual embedding
+            generation will be implemented in Layer 2.3.
+
         Args:
-            beat_sheet: Beat sheet dictionary
-        
+            beat_sheet: Beat sheet dictionary containing 'beats' list,
+                where each beat has an 'embedding_prompt' field.
+
         Returns:
-            List of embedding vectors (placeholder: empty arrays)
+            List[List]: List of embedding vectors, one per beat.
+                Currently returns empty lists as placeholders.
         """
         beats = beat_sheet.get("beats", [])
         
@@ -497,13 +563,17 @@ Requirements:
         output_path: Path,
         include_metadata: bool = True
     ) -> None:
-        """
-        Save beat sheet to JSON file.
-        
+        """Save beat sheet to JSON file.
+
+        Writes beat sheet data to specified path with optional generation
+        metadata for reproducibility.
+
         Args:
-            beat_sheet: Beat sheet dictionary
-            output_path: Path to save beats.json
-            include_metadata: Whether to include generation metadata
+            beat_sheet: Beat sheet dictionary to save, containing beats
+                and related data.
+            output_path: Path where beats.json will be saved.
+            include_metadata: Whether to include '_metadata' field with
+                generator version, temperature, and beat count info.
         """
         output_data = beat_sheet.copy()
         

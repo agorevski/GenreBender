@@ -16,6 +16,18 @@ from trailer_generator.checkpoint import load_shots_from_metadata, save_shots_to
 from trailer_generator.ingest import KeyframeExtractor
 
 def main():
+    """Execute the keyframe extraction pipeline stage.
+
+    This function orchestrates Stage 2 of the trailer generation pipeline,
+    extracting multiple frames per shot for temporal analysis. It validates
+    prerequisites, loads shot metadata, extracts keyframes using configurable
+    settings, and updates the checkpoint system.
+
+    Raises:
+        SystemExit: If prerequisite stage 'shot_detection' is not completed,
+            if the stage is already completed (without --force flag),
+            or if shot metadata cannot be loaded.
+    """
     parser = argparse.ArgumentParser(
         description='Stage 2: Keyframe Extraction - Extract multiple frames per shot (genre-agnostic)'
     )

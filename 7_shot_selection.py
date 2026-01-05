@@ -16,6 +16,17 @@ from pipeline_common import (
 from trailer_generator.analysis import ShotSelector
 
 def main():
+    """Execute the shot selection stage of the trailer generation pipeline.
+
+    This function orchestrates Stage 6 of the pipeline, which selects the
+    top-scored shots for inclusion in the final trailer. It loads shot
+    metadata from previous stages, applies selection criteria, and saves
+    the selected shots for narrative generation.
+
+    Raises:
+        SystemExit: If prerequisite stages are not completed, if the stage
+            is already completed (without --force), or if shot loading fails.
+    """
     parser = argparse.ArgumentParser(
         description='Stage 6: Shot Selection - Select top shots for trailer'
     )

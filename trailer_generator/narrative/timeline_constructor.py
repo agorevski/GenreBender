@@ -121,15 +121,21 @@ class TimelineConstructor:
         return timeline
     
     def _allocate_time_budget(self, beats: List[Dict]) -> Dict[str, Dict]:
-        """
-        Allocate time budget to each beat based on position and type.
-        
+        """Allocate time budget to each beat based on position and type.
+
         Uses standard trailer structure:
         - First 10%: Hook (fast)
         - 10-40%: Setup (moderate)
         - 40-70%: Escalation (fast)
         - 70-90%: Climax (intense, quick cuts)
         - 90-100%: Stinger (very fast)
+
+        Args:
+            beats: List of beat dictionaries containing beat metadata.
+
+        Returns:
+            Dictionary mapping beat IDs to budget dictionaries containing
+            duration, shot_count, and position values.
         """
         total_beats = len(beats)
         budgets = {}
@@ -288,14 +294,22 @@ class TimelineConstructor:
         total_duration: float,
         position: float
     ) -> List[float]:
-        """
-        Allocate duration to individual shots within a beat.
-        
+        """Allocate duration to individual shots within a beat.
+
         Varies by position:
         - Opening: Longer establishing shots
         - Middle: Varied pacing
         - Climax: Quick cuts
         - Stinger: Very short
+
+        Args:
+            shot_count: Number of shots to allocate duration for.
+            total_duration: Total time budget in seconds for all shots.
+            position: Relative position in timeline (0.0 to 1.0).
+
+        Returns:
+            List of durations in seconds for each shot, normalized to
+            sum to total_duration.
         """
         durations = []
         
@@ -336,14 +350,20 @@ class TimelineConstructor:
         shots: List[Dict],
         genre: str
     ) -> List[Dict]:
-        """
-        Add transition specifications between shots.
-        
+        """Add transition specifications between shots.
+
         Transition types:
         - cut: Hard cut (default)
         - dissolve: Cross-dissolve (0.5s)
         - fade_black: Fade to black (1.0s)
         - smash_cut: Abrupt cut with audio spike
+
+        Args:
+            shots: List of shot dictionaries to add transitions to.
+            genre: Target genre for selecting transition style.
+
+        Returns:
+            List of shot dictionaries with 'transition_out' field added.
         """
         genre_transitions = {
             'thriller': {
@@ -399,7 +419,15 @@ class TimelineConstructor:
         return shots
     
     def _get_pacing_profile(self, shots: List[Dict]) -> Dict:
-        """Calculate pacing statistics for the timeline."""
+        """Calculate pacing statistics for the timeline.
+
+        Args:
+            shots: List of shot dictionaries with timeline_duration values.
+
+        Returns:
+            Dictionary containing avg_shot_duration, min_shot_duration,
+            max_shot_duration, total_shots, and shots_per_minute metrics.
+        """
         durations = [s['timeline_duration'] for s in shots]
         
         return {

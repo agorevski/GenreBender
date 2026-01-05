@@ -80,7 +80,15 @@ class SubtitleParser:
         return False
     
     def _parse_entries(self):
-        """Parse subtitle entries into structured format."""
+        """Parse subtitle entries into structured format.
+
+        Processes loaded subtitles, converting them to dictionaries with
+        timing information and cleaned text. Filters out entries shorter
+        than min_dialogue_duration.
+
+        Returns:
+            None: Results are stored in self._parsed_entries.
+        """
         if not self._subtitles:
             self._parsed_entries = []
             return

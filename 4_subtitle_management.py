@@ -16,6 +16,21 @@ from trailer_generator.checkpoint import load_shots_from_metadata, save_shots_to
 from trailer_generator.ingest import SubtitleExtractor
 
 def main():
+    """Execute the subtitle management pipeline stage.
+
+    Extracts subtitle data from SRT files and maps dialogue entries to video
+    shots. This stage enriches shot metadata with dialogue information including
+    word counts, dialogue density, and emotional markers.
+
+    The function handles three scenarios:
+        1. Subtitles disabled or skipped: Adds empty subtitle data to all shots.
+        2. No SRT file found: Either falls back to no subtitles or exits with error.
+        3. SRT file found: Parses subtitles and maps them to shots.
+
+    Raises:
+        SystemExit: If prerequisite stages are not completed, SRT parsing fails,
+            or other critical errors occur.
+    """
     parser = argparse.ArgumentParser(
         description='Stage 4: Subtitle Management - Extract and map subtitles to shots (genre-agnostic)'
     )

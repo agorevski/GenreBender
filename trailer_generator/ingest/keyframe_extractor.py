@@ -25,7 +25,11 @@ class GPUCapabilities:
     
     @staticmethod
     def has_cuda() -> bool:
-        """Check if CUDA is available for OpenCV."""
+        """Check if CUDA is available for OpenCV.
+        
+        Returns:
+            bool: True if CUDA-enabled GPU devices are available, False otherwise.
+        """
         try:
             return cv2.cuda.getCudaEnabledDeviceCount() > 0
         except:
@@ -33,7 +37,14 @@ class GPUCapabilities:
     
     @staticmethod
     def has_ffmpeg_hwaccel() -> bool:
-        """Check if FFmpeg hardware acceleration is available."""
+        """Check if FFmpeg hardware acceleration is available.
+        
+        Runs FFmpeg to query available hardware accelerators and checks
+        for common GPU acceleration methods (CUDA, NVDEC, VAAPI, QSV).
+        
+        Returns:
+            bool: True if hardware acceleration is available, False otherwise.
+        """
         try:
             import subprocess
             result = subprocess.run(
@@ -49,12 +60,19 @@ class GPUCapabilities:
     
     @staticmethod
     def get_best_decoder(use_gpu: bool = True, device_id: int = 0) -> Tuple[str, dict]:
-        """
-        Determine best available video decoder.
+        """Determine best available video decoder.
         
+        Checks for available GPU acceleration in order of preference:
+        CUDA (fastest), FFmpeg hardware acceleration, then CPU fallback.
+        
+        Args:
+            use_gpu: Whether to attempt GPU acceleration. Defaults to True.
+            device_id: GPU device ID to use. Defaults to 0.
+            
         Returns:
-            Tuple of (decoder_type, decoder_params)
-            decoder_type: 'cuda', 'cpu', or 'ffmpeg_hwaccel'
+            Tuple[str, dict]: A tuple containing:
+                - decoder_type: One of 'cuda', 'ffmpeg_hwaccel', or 'cpu'
+                - decoder_params: Dictionary of decoder-specific parameters
         """
         if not use_gpu:
             return 'cpu', {}
@@ -81,6 +99,12 @@ class SequentialKeyframeExtractor:
     """
     
     def __init__(self, output_dir: Path, quality: int = 95):
+        """Initialize the sequential keyframe extractor.
+        
+        Args:
+            output_dir: Directory path where keyframes will be saved.
+            quality: JPEG quality for saved keyframes (1-100). Defaults to 95.
+        """
         self.output_dir = output_dir
         self.quality = quality
     
@@ -180,7 +204,19 @@ class SequentialKeyframeExtractor:
     
     def _calculate_target_frames(self, shot: Dict, fps: float, 
                                  num_frames: int) -> List[int]:
-        """Calculate evenly-spaced frame numbers within a shot."""
+        """Calculate evenly-spaced frame numbers within a shot.
+        
+        For very short shots (< 0.5s) or single frame requests, returns
+        only the middle frame. Otherwise, distributes frames evenly.
+        
+        Args:
+            shot: Shot dictionary containing 'start_time' and 'end_time'.
+            fps: Video frames per second.
+            num_frames: Number of frames to extract from the shot.
+            
+        Returns:
+            List[int]: Sorted list of frame numbers to extract.
+        """
         duration = shot['end_time'] - shot['start_time']
         
         # Handle very short shots
@@ -205,6 +241,14 @@ class ParallelKeyframeExtractor:
     """
     
     def __init__(self, output_dir: Path, quality: int = 95, num_workers: int = 0):
+        """Initialize the parallel keyframe extractor.
+        
+        Args:
+            output_dir: Directory path where keyframes will be saved.
+            quality: JPEG quality for saved keyframes (1-100). Defaults to 95.
+            num_workers: Number of parallel worker processes. Defaults to 0
+                (auto-detect CPU count).
+        """
         self.output_dir = output_dir
         self.quality = quality
         self.num_workers = num_workers if num_workers > 0 else mp.cpu_count()
@@ -300,6 +344,17 @@ class GPUKeyframeExtractor:
     def __init__(self, output_dir: Path, quality: int = 95, 
                  device_id: int = 0, use_parallel: bool = True,
                  num_workers: int = 0):
+        """Initialize the GPU-accelerated keyframe extractor.
+        
+        Args:
+            output_dir: Directory path where keyframes will be saved.
+            quality: JPEG quality for saved keyframes (1-100). Defaults to 95.
+            device_id: GPU device ID to use for acceleration. Defaults to 0.
+            use_parallel: Whether to use parallel CPU processing as fallback.
+                Defaults to True.
+            num_workers: Number of parallel worker processes for fallback.
+                Defaults to 0 (auto-detect CPU count).
+        """
         self.output_dir = output_dir
         self.quality = quality
         self.device_id = device_id
@@ -312,10 +367,18 @@ class GPUKeyframeExtractor:
     
     def extract_keyframes(self, video_path: str, shots: List[Dict],
                          num_frames: int = 5) -> List[Dict]:
-        """
-        Extract keyframes using GPU acceleration.
+        """Extract keyframes using GPU acceleration.
         
-        Falls back to CPU if GPU fails.
+        Attempts to use the best available GPU decoder, falling back to
+        CPU-based extraction if GPU is unavailable or fails.
+        
+        Args:
+            video_path: Path to the source video file.
+            shots: List of shot dictionaries with timing information.
+            num_frames: Number of frames to extract per shot. Defaults to 5.
+            
+        Returns:
+            List[Dict]: Updated shots list with 'keyframes' and 'keyframe' paths.
         """
         if self.decoder_type == 'cuda':
             return self._extract_cuda(video_path, shots, num_frames)
@@ -335,7 +398,19 @@ class GPUKeyframeExtractor:
     
     def _extract_cuda(self, video_path: str, shots: List[Dict],
                      num_frames: int = 5) -> List[Dict]:
-        """Extract using CUDA GPU decoder."""
+        """Extract keyframes using CUDA GPU decoder.
+        
+        Note: Full CUDA pipeline not yet implemented; falls back to
+        parallel CPU extraction with GPU post-processing.
+        
+        Args:
+            video_path: Path to the source video file.
+            shots: List of shot dictionaries with timing information.
+            num_frames: Number of frames to extract per shot. Defaults to 5.
+            
+        Returns:
+            List[Dict]: Updated shots list with keyframe paths.
+        """
         try:
             logger.info("Using CUDA GPU decoder")
             
@@ -358,7 +433,19 @@ class GPUKeyframeExtractor:
     
     def _extract_ffmpeg_hwaccel(self, video_path: str, shots: List[Dict],
                                 num_frames: int = 5) -> List[Dict]:
-        """Extract using FFmpeg hardware acceleration."""
+        """Extract keyframes using FFmpeg hardware acceleration.
+        
+        Note: FFmpeg hwaccel requires custom implementation; currently
+        falls back to optimized CPU extraction.
+        
+        Args:
+            video_path: Path to the source video file.
+            shots: List of shot dictionaries with timing information.
+            num_frames: Number of frames to extract per shot. Defaults to 5.
+            
+        Returns:
+            List[Dict]: Updated shots list with keyframe paths.
+        """
         # FFmpeg hwaccel requires custom implementation
         # For now, use optimized CPU path
         logger.info("FFmpeg hwaccel extraction (optimized CPU fallback)")
@@ -366,7 +453,18 @@ class GPUKeyframeExtractor:
     
     def _fallback_parallel(self, video_path: str, shots: List[Dict],
                           num_frames: int = 5) -> List[Dict]:
-        """Fallback to parallel CPU extraction."""
+        """Fallback to parallel CPU extraction.
+        
+        Used when GPU extraction is unavailable or fails.
+        
+        Args:
+            video_path: Path to the source video file.
+            shots: List of shot dictionaries with timing information.
+            num_frames: Number of frames to extract per shot. Defaults to 5.
+            
+        Returns:
+            List[Dict]: Updated shots list with keyframe paths.
+        """
         extractor = ParallelKeyframeExtractor(
             self.output_dir, self.quality, self.num_workers
         )
@@ -442,7 +540,19 @@ class KeyframeExtractor:
     
     def _extract_legacy(self, video_path: str, shots: List[Dict],
                        num_frames: int = 5) -> List[Dict]:
-        """Legacy random-access extraction (original slow method)."""
+        """Legacy random-access extraction (original slow method).
+        
+        Uses random seeking to each frame, which is slower than sequential
+        or parallel methods. Maintained for backwards compatibility.
+        
+        Args:
+            video_path: Path to the source video file.
+            shots: List of shot dictionaries with timing information.
+            num_frames: Number of frames to extract per shot. Defaults to 5.
+            
+        Returns:
+            List[Dict]: Updated shots list with keyframe paths.
+        """
         logger.info(f"Extracting {num_frames} keyframes per shot from {len(shots)} shots...")
         
         cap = cv2.VideoCapture(video_path)
@@ -483,7 +593,21 @@ class KeyframeExtractor:
     def _extract_multiple_frames_internal(self, cap: cv2.VideoCapture, shot: Dict,
                                          fps: float, shot_id: int,
                                          num_frames: int) -> List[Path]:
-        """Legacy internal extraction method."""
+        """Legacy internal extraction method for a single shot.
+        
+        Extracts evenly-spaced frames from a shot using random seeking.
+        For short shots (< 0.5s), extracts only the middle frame.
+        
+        Args:
+            cap: OpenCV VideoCapture object for the video.
+            shot: Shot dictionary containing 'start_time' and 'end_time'.
+            fps: Video frames per second.
+            shot_id: Unique identifier for the shot (used in filenames).
+            num_frames: Number of frames to extract from the shot.
+            
+        Returns:
+            List[Path]: List of paths to saved keyframe images.
+        """
         duration = shot['end_time'] - shot['start_time']
         frame_paths = []
         
@@ -536,9 +660,22 @@ class KeyframeExtractor:
 # Worker function for parallel processing (must be top-level for pickling)
 def _extract_chunk_worker(video_path: str, shots: List[Dict], num_frames: int,
                           output_dir: Path, quality: int) -> List[Dict]:
-    """
-    Worker function for parallel keyframe extraction.
-    Processes a chunk of shots independently.
+    """Worker function for parallel keyframe extraction.
+    
+    Processes a chunk of shots independently in a separate process.
+    Sorts shots by start time for efficient sequential reading within
+    the chunk, minimizing seek operations.
+    
+    Args:
+        video_path: Path to the source video file.
+        shots: List of shot dictionaries to process in this chunk.
+        num_frames: Number of frames to extract per shot.
+        output_dir: Directory path where keyframes will be saved.
+        quality: JPEG quality for saved keyframes (1-100).
+        
+    Returns:
+        List[Dict]: Updated shots list with 'keyframes' and 'keyframe' paths
+            populated for each shot.
     """
     # Sort shots for sequential access within this chunk
     shots_sorted = sorted(shots, key=lambda s: s['start_time'])

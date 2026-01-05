@@ -21,15 +21,14 @@ class VideoAssembler:
     
     def __init__(self, config: Dict, genre_profile: Dict, output_dir: Path,
                  enable_color_grading: bool = True, enable_transitions: bool = True):
-        """
-        Initialize video assembler.
+        """Initialize video assembler.
         
         Args:
-            config: Global configuration dictionary
-            genre_profile: Genre-specific configuration
-            output_dir: Base output directory
-            enable_color_grading: Whether to apply color grading
-            enable_transitions: Whether to add transitions between shots
+            config: Global configuration dictionary containing video settings.
+            genre_profile: Genre-specific configuration with color grading options.
+            output_dir: Base output directory for assembled videos.
+            enable_color_grading: Whether to apply color grading. Defaults to True.
+            enable_transitions: Whether to add transitions between shots. Defaults to True.
         """
         self.config = config
         self.genre_profile = genre_profile
@@ -52,18 +51,27 @@ class VideoAssembler:
     def assemble_video(self, timeline: Dict, shots_dir: Path, 
                       output_path: Path, shot_metadata: List[Dict] = None,
                       azure_client = None) -> str:
-        """
-        Main video assembly orchestrator.
+        """Orchestrate the main video assembly process.
+        
+        Coordinates title generation, transition selection, and video assembly
+        using either simple concatenation or complex filter-based transitions.
         
         Args:
-            timeline: Timeline dictionary with shot sequence
-            shots_dir: Directory containing shot video files
-            output_path: Path for output video
-            shot_metadata: Full shot metadata (needed for transitions)
-            azure_client: Azure OpenAI client for AI features (optional)
+            timeline: Timeline dictionary with shot sequence and durations.
+            shots_dir: Directory containing shot video files.
+            output_path: Path for the output video file.
+            shot_metadata: Full shot metadata needed for transition selection.
+                Defaults to None.
+            azure_client: Azure OpenAI client for AI-powered features.
+                Defaults to None.
             
         Returns:
-            Path to assembled video
+            str: Path to the assembled video file.
+            
+        Raises:
+            FileNotFoundError: If required shot files are missing.
+            ValueError: If timeline contains no shots or missing durations.
+            subprocess.CalledProcessError: If FFmpeg execution fails.
         """
         logger.info("Starting video assembly...")
         
@@ -111,15 +119,15 @@ class VideoAssembler:
         return str(output)
     
     def _validate_timeline(self, timeline: Dict, shots_dir: Path):
-        """
-        Validate timeline and shot files exist.
+        """Validate timeline structure and verify shot files exist.
         
         Args:
-            timeline: Timeline dictionary
-            shots_dir: Directory containing shots
+            timeline: Timeline dictionary containing shot sequence.
+            shots_dir: Directory containing shot video files.
             
         Raises:
-            FileNotFoundError: If shot files missing
+            ValueError: If timeline contains no shots or shots missing durations.
+            FileNotFoundError: If required shot video files are missing.
         """
         timeline_shots = timeline.get('shots', [])
         if not timeline_shots:
@@ -145,17 +153,22 @@ class VideoAssembler:
     
     def _assemble_simple(self, timeline: Dict, shots_dir: Path, 
                         output_path: Path, titles: List[Dict]) -> Path:
-        """
-        Simple assembly: concatenate shots with color grading.
+        """Assemble video using simple concatenation with color grading.
+        
+        Uses FFmpeg filter_complex to trim each shot to its timeline duration
+        and apply color grading before concatenating.
         
         Args:
-            timeline: Timeline dictionary
-            shots_dir: Directory containing shots
-            output_path: Output path
-            titles: Title cards (not implemented in simple mode)
+            timeline: Timeline dictionary containing shot sequence and durations.
+            shots_dir: Directory containing shot video files.
+            output_path: Path for the output video file.
+            titles: Title cards to overlay. Not implemented in simple mode.
             
         Returns:
-            Path to output video
+            Path: Path to the output video file.
+            
+        Raises:
+            subprocess.CalledProcessError: If FFmpeg execution fails.
         """
         logger.info("Using simple concatenation method with per-shot trim...")
         
@@ -230,18 +243,25 @@ class VideoAssembler:
     def _assemble_with_transitions(self, timeline: Dict, shots_dir: Path,
                                    output_path: Path, transitions: List[Dict],
                                    titles: List[Dict]) -> Path:
-        """
-        Complex assembly: shots with transitions using filter_complex.
+        """Assemble video with transitions using FFmpeg filter_complex.
+        
+        Applies color grading, trims shots to timeline durations, and uses
+        xfade filters to create smooth transitions between consecutive shots.
         
         Args:
-            timeline: Timeline dictionary
-            shots_dir: Directory containing shots
-            output_path: Output path
-            transitions: List of transition specifications
-            titles: Title cards to overlay
+            timeline: Timeline dictionary containing shot sequence and durations.
+            shots_dir: Directory containing shot video files.
+            output_path: Path for the output video file.
+            transitions: List of transition specifications with type, duration,
+                and offset for each transition.
+            titles: Title cards to overlay on the video.
             
         Returns:
-            Path to output video
+            Path: Path to the output video file.
+            
+        Raises:
+            subprocess.CalledProcessError: If FFmpeg execution fails. Filter
+                complex is saved to temp directory for debugging.
         """
         logger.info("Using complex filter with transitions...")
         
@@ -302,16 +322,21 @@ class VideoAssembler:
     
     def _build_filter_complex(self, timeline_shots: List[Dict], 
                              shots_dir: Path, transitions: List[Dict]) -> str:
-        """
-        Build FFmpeg filter_complex string for transitions and color grading.
+        """Build FFmpeg filter_complex string for transitions and color grading.
+        
+        Constructs a complete filter_complex string that applies color grading,
+        trims each shot to its timeline duration, and chains xfade transitions
+        between consecutive shots.
         
         Args:
-            timeline_shots: List of shots in timeline
-            shots_dir: Directory containing shots
-            transitions: List of transition specifications
+            timeline_shots: List of shot dictionaries from the timeline,
+                each containing shot_id and duration information.
+            shots_dir: Directory containing the shot video files.
+            transitions: List of transition specifications, each containing
+                type (e.g., 'fade', 'wipe'), duration, and offset values.
             
         Returns:
-            filter_complex string
+            str: Complete FFmpeg filter_complex string ready for execution.
         """
         filters = []
         
@@ -369,10 +394,10 @@ class VideoAssembler:
         return filter_string
     
     def _get_color_grade_filter(self) -> str:
-        """
-        Get color grading filter from genre profile.
+        """Get color grading filter string from genre profile.
         
         Returns:
-            FFmpeg filter string
+            str: FFmpeg filter string for color grading, or empty string
+                if no color grading is configured.
         """
         return self.genre_profile.get('color_grade', {}).get('filter', '')

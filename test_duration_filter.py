@@ -9,7 +9,23 @@ from pathlib import Path
 import yaml
 
 def create_skipped_analysis(reason: str, min_duration: float = None) -> dict:
-    """Mock the skipped analysis function from 5_remote_analysis.py"""
+    """Create a mock skipped analysis result for testing.
+
+    Simulates the skipped analysis function from 5_remote_analysis.py,
+    returning a standardized analysis structure for shots that are skipped.
+
+    Args:
+        reason: The reason why the shot was skipped (e.g., 'duration_too_short').
+        min_duration: Optional minimum duration threshold. If provided, it will
+            be included in the caption message.
+
+    Returns:
+        A dictionary containing the skipped analysis result with keys:
+            - caption: Human-readable skip message.
+            - skipped: Boolean flag set to True.
+            - skip_reason: The reason string passed as argument.
+            - attributes: Dictionary of zeroed analysis attributes.
+    """
     caption = f"Shot skipped ({reason})"
     if min_duration is not None:
         caption = f"Shot skipped (duration < {min_duration}s)"
@@ -30,7 +46,22 @@ def create_skipped_analysis(reason: str, min_duration: float = None) -> dict:
     }
 
 def test_duration_filter():
-    """Test the duration filtering logic"""
+    """Test the duration filtering logic for remote analysis.
+
+    This function validates that shots below the configured minimum duration
+    are correctly identified and skipped, while shots meeting the threshold
+    are marked as qualifying for analysis.
+
+    The test performs the following steps:
+        1. Loads the minimum shot duration from settings.yaml configuration.
+        2. Creates mock shot data with various durations.
+        3. Applies the filtering logic to categorize shots.
+        4. Verifies the results against expected outcomes.
+        5. Displays the skipped analysis structure for inspection.
+
+    Raises:
+        Exception: If configuration loading fails or unexpected errors occur.
+    """
     print("=" * 60)
     print("Testing Duration Filter for Remote Analysis")
     print("=" * 60)

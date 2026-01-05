@@ -16,6 +16,20 @@ from trailer_generator.checkpoint import save_shots_to_metadata
 from trailer_generator.ingest import ShotDetector
 
 def main():
+    """Execute the shot detection pipeline stage.
+
+    This function performs the following steps:
+        1. Parses command-line arguments for input video and configuration.
+        2. Initializes the pipeline stage with checkpointing support.
+        3. Loads detection configuration from YAML config file.
+        4. Runs PySceneDetect to identify scene boundaries in the video.
+        5. Extracts shot video files and saves metadata to JSON.
+        6. Marks the stage as completed in the checkpoint system.
+
+    Raises:
+        SystemExit: If the stage is already completed (unless --force is used),
+            or if a fatal error occurs during processing.
+    """
     parser = argparse.ArgumentParser(
         description='Stage 1: Shot Detection - Identify scene boundaries (genre-agnostic)'
     )

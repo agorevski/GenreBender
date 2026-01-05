@@ -17,7 +17,11 @@ class OMDBRating:
     value: str
     
     def to_dict(self) -> Dict[str, str]:
-        """Convert to dictionary"""
+        """Convert the rating to a dictionary matching OMDB API format.
+
+        Returns:
+            Dict[str, str]: Dictionary with 'Source' and 'Value' keys.
+        """
         return {
             'Source': self.source,
             'Value': self.value
@@ -25,7 +29,14 @@ class OMDBRating:
     
     @classmethod
     def from_dict(cls, data: Dict[str, str]) -> 'OMDBRating':
-        """Create from dictionary"""
+        """Create an OMDBRating instance from a dictionary.
+
+        Args:
+            data: Dictionary containing 'Source' and 'Value' keys.
+
+        Returns:
+            OMDBRating: A new OMDBRating instance populated from the dictionary.
+        """
         return cls(
             source=data.get('Source', ''),
             value=data.get('Value', '')
@@ -91,7 +102,11 @@ class OMDBMovie:
     response: str = "True"
     
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary matching OMDB API format"""
+        """Convert the movie to a dictionary matching OMDB API format.
+
+        Returns:
+            Dict[str, Any]: Dictionary with all movie attributes using OMDB API keys.
+        """
         return {
             'Title': self.title,
             'Year': self.year,
@@ -166,22 +181,38 @@ class OMDBMovie:
     
     @property
     def genres_list(self) -> List[str]:
-        """Get genres as a list"""
+        """Get genres as a list.
+
+        Returns:
+            List[str]: List of genre strings, stripped of whitespace.
+        """
         return [g.strip() for g in self.genre.split(',') if g.strip()]
     
     @property
     def actors_list(self) -> List[str]:
-        """Get actors as a list"""
+        """Get actors as a list.
+
+        Returns:
+            List[str]: List of actor names, stripped of whitespace.
+        """
         return [a.strip() for a in self.actors.split(',') if a.strip()]
     
     @property
     def languages_list(self) -> List[str]:
-        """Get languages as a list"""
+        """Get languages as a list.
+
+        Returns:
+            List[str]: List of language strings, stripped of whitespace.
+        """
         return [l.strip() for l in self.language.split(',') if l.strip()]
     
     @property
     def runtime_minutes(self) -> Optional[int]:
-        """Extract runtime in minutes as integer"""
+        """Extract runtime in minutes as an integer.
+
+        Returns:
+            Optional[int]: Runtime in minutes, or None if parsing fails.
+        """
         try:
             return int(self.runtime.split()[0])
         except (ValueError, IndexError):
@@ -189,7 +220,11 @@ class OMDBMovie:
     
     @property
     def imdb_rating_float(self) -> Optional[float]:
-        """Get IMDb rating as float"""
+        """Get IMDb rating as a float.
+
+        Returns:
+            Optional[float]: IMDb rating as float, or None if parsing fails.
+        """
         try:
             return float(self.imdb_rating)
         except ValueError:
@@ -197,7 +232,11 @@ class OMDBMovie:
     
     @property
     def metascore_int(self) -> Optional[int]:
-        """Get Metascore as integer"""
+        """Get Metascore as an integer.
+
+        Returns:
+            Optional[int]: Metascore as integer, or None if parsing fails.
+        """
         try:
             return int(self.metascore)
         except ValueError:
@@ -219,5 +258,9 @@ class OMDBMovie:
         return None
     
     def __str__(self) -> str:
-        """String representation"""
+        """Return a string representation of the movie.
+
+        Returns:
+            str: Formatted string with title, year, genre, and IMDb rating.
+        """
         return f"{self.title} ({self.year}) - {self.genre} - IMDb: {self.imdb_rating}"

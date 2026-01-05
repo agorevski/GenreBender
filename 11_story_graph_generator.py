@@ -29,7 +29,15 @@ from trailer_generator.analysis.story_graph_generator import StoryGraphGenerator
 from pathlib import Path
 
 def setup_logging(output_dir: Path, verbose: bool = False):
-    """Setup logging configuration."""
+    """Setup logging configuration with file and console handlers.
+
+    Args:
+        output_dir: Directory where log file will be created.
+        verbose: If True, sets log level to DEBUG; otherwise INFO.
+
+    Returns:
+        logging.Logger: Configured logger instance for the module.
+    """
     log_level = logging.DEBUG if verbose else logging.INFO
     
     # Create output directory if needed
@@ -50,7 +58,19 @@ def setup_logging(output_dir: Path, verbose: bool = False):
     return logging.getLogger(__name__)
 
 def load_config(config_path: str = 'trailer_generator/config/settings.yaml') -> dict:
-    """Load configuration from YAML file with environment variable overrides."""
+    """Load configuration from YAML file with environment variable overrides.
+
+    Loads settings from a YAML configuration file and allows Azure OpenAI
+    settings to be overridden via environment variables (AZURE_OPENAI_ENDPOINT
+    and AZURE_OPENAI_KEY).
+
+    Args:
+        config_path: Path to the YAML configuration file.
+
+    Returns:
+        dict: Configuration dictionary with settings. Returns empty dict if
+            loading fails.
+    """
     try:
         import os
         from dotenv import load_dotenv
@@ -79,7 +99,17 @@ def load_config(config_path: str = 'trailer_generator/config/settings.yaml') -> 
         return {}
 
 def sanitize_filename(name: str) -> str:
-    """Sanitize movie name for use as directory name."""
+    """Sanitize movie name for use as directory name.
+
+    Removes special characters, replaces spaces with underscores, and
+    consolidates consecutive underscores.
+
+    Args:
+        name: The movie name to sanitize.
+
+    Returns:
+        str: Sanitized string safe for use as a directory name.
+    """
     # Remove special characters
     sanitized = ''.join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in name)
     # Replace spaces with underscores
@@ -90,14 +120,17 @@ def sanitize_filename(name: str) -> str:
     return sanitized.strip('_')
 
 def load_synopsis(synopsis_input: str) -> str:
-    """
-    Load synopsis from string or file.
-    
+    """Load synopsis from string or file.
+
     Args:
-        synopsis_input: Either synopsis text or path to text file
-        
+        synopsis_input: Either synopsis text or path to a text file containing
+            the synopsis.
+
     Returns:
-        Synopsis text
+        str: The synopsis text.
+
+    Raises:
+        SystemExit: If the file exists but cannot be read.
     """
     synopsis_path = Path(synopsis_input)
     
@@ -116,6 +149,16 @@ def load_synopsis(synopsis_input: str) -> str:
         return synopsis_input.strip()
 
 def main():
+    """Main entry point for the story graph generator CLI.
+
+    Parses command-line arguments, loads synopsis and subtitle files,
+    initializes the Azure OpenAI client, generates a semantic story graph
+    using hierarchical 3-stage processing, and saves the output files.
+
+    Raises:
+        SystemExit: On validation errors, missing configuration, or generation
+            failures.
+    """
     parser = argparse.ArgumentParser(
         description='Generate semantic story graph from movie synopsis and subtitles',
         formatter_class=argparse.RawDescriptionHelpFormatter,

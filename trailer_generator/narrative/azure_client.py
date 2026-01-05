@@ -16,17 +16,20 @@ class AzureOpenAIClient:
     Client for Azure OpenAI API with retry logic and rate limiting.
     """
     def __init__(self, endpoint: str, api_key: str, deployment_name: str, api_version: str = "2025-01-01-preview", max_retries: int = 3, temperature: float = 0.7, max_completion_tokens: int = 50000):
-        """
-        Initialize Azure OpenAI client.
+        """Initialize Azure OpenAI client.
         
         Args:
-            endpoint: Azure OpenAI endpoint URL
-            api_key: API key for authentication
-            deployment_name: Name of deployed model
-            api_version: API version to use
-            max_retries: Maximum retry attempts
-            temperature: Default sampling temperature
-            max_completion_tokens: Default maximum tokens for completion
+            endpoint (str): Azure OpenAI endpoint URL.
+            api_key (str): API key for authentication.
+            deployment_name (str): Name of deployed model.
+            api_version (str): API version to use. Defaults to "2025-01-01-preview".
+            max_retries (int): Maximum retry attempts. Defaults to 3.
+            temperature (float): Default sampling temperature. Defaults to 0.7.
+            max_completion_tokens (int): Default maximum tokens for completion.
+                Defaults to 50000.
+
+        Raises:
+            ValueError: If Azure OpenAI API key is not provided.
         """
         self.endpoint = endpoint
         self.api_key = api_key or os.getenv('AZURE_OPENAI_KEY')
@@ -48,17 +51,23 @@ class AzureOpenAIClient:
         logger.info(f"Initialized Azure OpenAI client with deployment: {deployment_name}")
     
     def generate_completion(self, messages: List[Dict[str, str]], temperature: Optional[float] = None, max_completion_tokens: Optional[int] = None, response_format: Optional[Dict] = None) -> str:
-        """
-        Generate completion from Azure OpenAI.
+        """Generate completion from Azure OpenAI.
         
         Args:
-            messages: List of message dictionaries
-            temperature: Sampling temperature (uses default from config if not specified)
-            max_completion_tokens: Maximum tokens in response (uses default from config if not specified)
-            response_format: Optional format specification (e.g., {"type": "json_object"})
+            messages (List[Dict[str, str]]): List of message dictionaries with
+                'role' and 'content' keys.
+            temperature (Optional[float]): Sampling temperature. Uses instance
+                default if not specified.
+            max_completion_tokens (Optional[int]): Maximum tokens in response.
+                Uses instance default if not specified.
+            response_format (Optional[Dict]): Format specification
+                (e.g., {"type": "json_object"}).
             
         Returns:
-            Generated completion text
+            str: Generated completion text.
+
+        Raises:
+            Exception: If API call fails after all retry attempts.
         """
         # Use instance defaults if not specified
         if temperature is None:
@@ -138,16 +147,21 @@ class AzureOpenAIClient:
                     raise
 
     def generate_structured_output(self, messages: List[Dict[str, str]], temperature: Optional[float] = None, max_completion_tokens: Optional[int] = None) -> str:
-        """
-        Generate structured JSON output.
+        """Generate structured JSON output.
         
         Args:
-            messages: List of message dictionaries
-            temperature: Sampling temperature (uses default from config if not specified)
-            max_completion_tokens: Maximum tokens in response (uses default from config if not specified)
+            messages (List[Dict[str, str]]): List of message dictionaries with
+                'role' and 'content' keys.
+            temperature (Optional[float]): Sampling temperature. Uses instance
+                default if not specified.
+            max_completion_tokens (Optional[int]): Maximum tokens in response.
+                Uses instance default if not specified.
             
         Returns:
-            JSON string
+            str: JSON string response.
+
+        Raises:
+            Exception: If API call fails after all retry attempts.
         """
         return self.generate_completion(
             messages=messages,
@@ -157,28 +171,29 @@ class AzureOpenAIClient:
         )
     
     def estimate_tokens(self, text: str) -> int:
-        """
-        Rough estimation of token count.
+        """Estimate token count from text.
+        
+        Uses a rough approximation of ~4 characters per token.
         
         Args:
-            text: Input text
+            text (str): Input text to estimate tokens for.
             
         Returns:
-            Estimated token count
+            int: Estimated token count.
         """
         # Rough approximation: ~4 chars per token
         return len(text) // 4
     
     def check_token_limit(self, messages: List[Dict[str, str]], max_tokens: int = 50000) -> bool:
-        """
-        Check if messages fit within token limit.
+        """Check if messages fit within token limit.
         
         Args:
-            messages: List of message dictionaries
-            max_tokens: Maximum allowed tokens
+            messages (List[Dict[str, str]]): List of message dictionaries with
+                'role' and 'content' keys.
+            max_tokens (int): Maximum allowed tokens. Defaults to 50000.
             
         Returns:
-            True if within limit
+            bool: True if estimated tokens are within limit, False otherwise.
         """
         total_chars = sum(len(m.get('content', '')) for m in messages)
         estimated_tokens = self.estimate_tokens(str(total_chars))
@@ -191,15 +206,18 @@ class AzureOpenAIClient:
         return within_limit
     
     def truncate_messages(self, messages: List[Dict[str, str]], max_tokens: int = 8000) -> List[Dict[str, str]]:
-        """
-        Truncate messages to fit token limit.
+        """Truncate messages to fit token limit.
+        
+        Keeps system messages intact and truncates user content if necessary.
         
         Args:
-            messages: List of message dictionaries
-            max_tokens: Maximum allowed tokens
+            messages (List[Dict[str, str]]): List of message dictionaries with
+                'role' and 'content' keys.
+            max_tokens (int): Maximum allowed tokens. Defaults to 8000.
             
         Returns:
-            Truncated messages list
+            List[Dict[str, str]]: Truncated messages list that fits within
+                the token limit.
         """
         if self.check_token_limit(messages, max_tokens):
             return messages

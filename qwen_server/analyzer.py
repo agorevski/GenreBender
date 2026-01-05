@@ -68,11 +68,17 @@ class MultimodalAnalyzer:
         logger.info(f"Loaded {len(self.attributes)} attributes from prompts file")
     
     def _load_prompt(self) -> str:
-        """
-        Load prompt template from YAML file and render with attribute definitions.
+        """Load prompt template from YAML file and render with attribute definitions.
+        
+        Reads the prompts YAML file specified in config, extracts attribute definitions,
+        and renders the specified prompt template with those attributes.
         
         Returns:
-            Rendered prompt string
+            str: Rendered prompt string with attribute placeholders filled in.
+            
+        Raises:
+            FileNotFoundError: If the prompts YAML file does not exist.
+            ValueError: If the specified prompt template is empty or missing.
         """
         # Get prompts file path (relative to qwen_server directory)
         prompts_file = self.config['processing'].get('prompts_file', 'prompts.yaml')
@@ -106,15 +112,19 @@ class MultimodalAnalyzer:
         return rendered_prompt
     
     def _render_prompt_template(self, template: str, attributes: Dict[str, str]) -> str:
-        """
-        Render prompt template by replacing {{attributes}} and {{attributes_list}} variables.
+        """Render prompt template by replacing {{attributes}} and {{attributes_list}} variables.
+        
+        Processes a template string and replaces placeholder variables with formatted
+        attribute lists. {{attributes}} becomes a bulleted list with descriptions,
+        while {{attributes_list}} becomes a response format list.
         
         Args:
-            template: Prompt template string with variables
-            attributes: Dictionary of attribute name -> description
+            template: Prompt template string containing {{attributes}} and/or
+                {{attributes_list}} placeholder variables.
+            attributes: Dictionary mapping attribute names to their descriptions.
             
         Returns:
-            Rendered prompt string
+            str: Rendered prompt string with all placeholders replaced.
         """
         # Generate {{attributes}} - bulleted list with descriptions
         attributes_lines = []
@@ -138,14 +148,18 @@ class MultimodalAnalyzer:
         return rendered
     
     def _get_prompt(self, custom_prompt: Optional[str] = None) -> str:
-        """
-        Get the prompt to use for analysis.
+        """Get the prompt to use for analysis.
+        
+        Determines which prompt to use based on configuration and API request.
+        If a custom prompt is provided and client overrides are allowed, uses
+        the custom prompt; otherwise falls back to the configured prompt.
         
         Args:
-            custom_prompt: Optional custom prompt from API request
+            custom_prompt: Optional custom prompt string from API request.
+                Defaults to None.
             
         Returns:
-            Prompt string to use
+            str: The prompt string to use for analysis.
         """
         # Use custom prompt if provided and allowed
         if custom_prompt and self.allow_client_prompt_override:
@@ -156,19 +170,28 @@ class MultimodalAnalyzer:
         return self.prompt
     
     def analyze_shot(self, shot_data: Dict, custom_prompt: Optional[str] = None) -> Dict:
-        """
-        Analyze a single shot with multiple frames and audio features.
+        """Analyze a single shot with multiple frames and audio features.
+        
+        Processes a video shot using either native video mode or keyframe extraction,
+        optionally integrating audio features for enhanced analysis.
         
         Args:
-            shot_data: Dictionary containing:
-                - images: List of base64 encoded images (for keyframe mode)
-                - video: Base64 encoded video file (for video mode)
-                - audio_features: Audio feature dictionary (optional)
-                - shot_id: Shot identifier
-                - start_time, end_time, duration: Timing info
+            shot_data: Dictionary containing shot information with the following keys:
+                - images (List[str]): List of base64 encoded images (for keyframe mode).
+                - video (str): Base64 encoded video file (for video mode).
+                - audio_features (Dict, optional): Audio feature dictionary for fusion.
+                - shot_id (str): Unique shot identifier.
+                - start_time (float): Shot start time in seconds.
+                - end_time (float): Shot end time in seconds.
+                - duration (float): Shot duration in seconds.
+            custom_prompt: Optional custom prompt string to override the default.
+                Defaults to None.
         
         Returns:
-            Dictionary with caption and genre attributes
+            Dict: Analysis results containing:
+                - caption (str): Text description of the shot.
+                - attributes (Dict[str, float]): Genre attribute scores (0.0-1.0).
+                - processing_mode (str): Either 'video' or 'keyframes'.
         """
         try:
             # Check if video mode and video data provided
@@ -203,14 +226,17 @@ class MultimodalAnalyzer:
             return self._empty_analysis()
     
     def _decode_images(self, base64_images: List[str]) -> List[Image.Image]:
-        """
-        Decode base64 images to PIL Images.
+        """Decode base64 images to PIL Images.
+        
+        Converts a list of base64 encoded image strings to PIL Image objects.
+        Invalid or corrupted images are skipped with a warning logged.
         
         Args:
-            base64_images: List of base64 encoded image strings
+            base64_images: List of base64 encoded image strings.
             
         Returns:
-            List of PIL Images
+            List[Image.Image]: List of decoded PIL Image objects in RGB mode.
+                May be shorter than input if some images failed to decode.
         """
         images = []
         for img_b64 in base64_images:
@@ -225,14 +251,20 @@ class MultimodalAnalyzer:
         return images
     
     def _analyze_video(self, shot_data: Dict) -> Dict:
-        """
-        Analyze a video clip using Qwen2-VL native video processing.
+        """Analyze a video clip using Qwen2-VL native video processing.
+        
+        Decodes base64 video, saves to temporary file, and processes with
+        the Qwen VL model's native video understanding capabilities.
         
         Args:
-            shot_data: Dictionary containing video data and metadata
+            shot_data: Dictionary containing video data and metadata with keys:
+                - video (str): Base64 encoded video file.
+                - duration (float): Video duration in seconds for FPS calculation.
             
         Returns:
-            Dictionary with caption and attributes
+            Dict: Analysis results containing:
+                - caption (str): Text description of the video.
+                - attributes (Dict[str, float]): Genre attribute scores (0.0-1.0).
         """
         try:
             # Decode base64 video to bytes
@@ -343,14 +375,18 @@ class MultimodalAnalyzer:
             return self._default_frame_analysis()
     
     def _analyze_visual(self, images: List[Image.Image]) -> Dict:
-        """
-        Analyze visual content from multiple frames.
+        """Analyze visual content from multiple frames.
+        
+        Selects key frames from the input images, analyzes each individually,
+        and aggregates the results with temporal weighting.
         
         Args:
-            images: List of PIL Images
+            images: List of PIL Image objects representing video frames.
             
         Returns:
-            Dictionary with caption and attributes
+            Dict: Aggregated analysis containing:
+                - caption (str): Combined text description.
+                - attributes (Dict[str, float]): Temporally-weighted attribute scores.
         """
         # For multi-frame analysis, we'll analyze key frames and aggregate
         # Using first, middle, and last frames for temporal understanding
@@ -370,14 +406,17 @@ class MultimodalAnalyzer:
         return aggregated
     
     def _select_key_frames(self, num_frames: int) -> List[int]:
-        """
-        Select key frame indices for analysis.
+        """Select key frame indices for analysis.
+        
+        Chooses representative frames from a sequence for efficient analysis.
+        For sequences of 3 or fewer frames, all are selected. For longer
+        sequences, first, middle, and last frames are chosen.
         
         Args:
-            num_frames: Total number of frames
+            num_frames: Total number of frames available.
             
         Returns:
-            List of frame indices to analyze
+            List[int]: List of zero-based frame indices to analyze.
         """
         if num_frames <= 3:
             return list(range(num_frames))
@@ -386,14 +425,19 @@ class MultimodalAnalyzer:
         return [0, num_frames // 2, num_frames - 1]
     
     def _analyze_single_frame(self, image: Image.Image) -> Dict:
-        """
-        Analyze a single frame using Qwen2-VL.
+        """Analyze a single frame using Qwen2-VL.
+        
+        Sends a single image to the Qwen VL model for analysis using the
+        configured prompt template. Handles GPU memory efficiently with
+        mixed precision when available.
         
         Args:
-            image: PIL Image
+            image: PIL Image object to analyze.
             
         Returns:
-            Dictionary with caption and attributes
+            Dict: Analysis results containing:
+                - caption (str): Text description of the frame.
+                - attributes (Dict[str, float]): Genre attribute scores (0.0-1.0).
         """
         # Use dynamically loaded prompt
         prompt = self.prompt
@@ -482,14 +526,19 @@ class MultimodalAnalyzer:
             return self._default_frame_analysis()
     
     def _parse_model_output(self, text: str) -> Dict:
-        """
-        Parse model output to extract caption and attributes.
+        """Parse model output to extract caption and attributes.
+        
+        Extracts structured information from the model's text response.
+        Looks for 'Description:' line for caption and 'Key: Value' lines
+        for numeric attributes. Missing attributes get default value of 0.5.
         
         Args:
-            text: Generated text from model
+            text: Generated text from the model in expected format.
             
         Returns:
-            Dictionary with caption and attributes
+            Dict: Parsed results containing:
+                - caption (str): Extracted description or 'Scene analysis' default.
+                - attributes (Dict[str, float]): Attribute scores clamped to [0.0, 1.0].
         """
         lines = text.strip().split('\n')
         caption = ""
@@ -521,11 +570,15 @@ class MultimodalAnalyzer:
         }
     
     def _default_frame_analysis(self) -> Dict:
-        """
-        Return default analysis when model fails.
+        """Return default analysis when model fails.
+        
+        Provides fallback values when frame analysis cannot be completed.
+        All attributes are set to 0.5 (neutral) and caption to 'Scene'.
         
         Returns:
-            Dictionary with default values
+            Dict: Default analysis containing:
+                - caption (str): Default 'Scene' caption.
+                - attributes (Dict[str, float]): All attributes set to 0.5.
         """
         # Use dynamically loaded attributes
         default_attrs = {attr_name: 0.5 for attr_name in self.attributes.keys()}
@@ -536,14 +589,21 @@ class MultimodalAnalyzer:
         }
     
     def _aggregate_temporal(self, frame_analyses: List[Dict]) -> Dict:
-        """
-        Aggregate analyses from multiple frames.
+        """Aggregate analyses from multiple frames.
+        
+        Combines multiple frame analyses into a single result using temporal
+        weighting. Middle frames receive higher weight. Motion is enhanced
+        based on intensity variance across frames.
         
         Args:
-            frame_analyses: List of frame analysis dictionaries
+            frame_analyses: List of frame analysis dictionaries, each containing
+                'caption' and 'attributes' keys.
             
         Returns:
-            Aggregated analysis
+            Dict: Aggregated analysis containing:
+                - caption (str): Caption from first frame with valid caption.
+                - attributes (Dict[str, float]): Weighted average of all attributes
+                    with motion enhancement based on temporal variance.
         """
         if not frame_analyses:
             return self._default_frame_analysis()
@@ -574,15 +634,17 @@ class MultimodalAnalyzer:
         }
     
     def _get_temporal_weights(self, num_frames: int) -> List[float]:
-        """
-        Get weights for temporal aggregation.
-        Middle frames weighted more heavily.
+        """Get weights for temporal aggregation.
+        
+        Calculates weights for combining frame analyses, with middle frames
+        receiving higher importance than edge frames.
         
         Args:
-            num_frames: Number of frames
+            num_frames: Number of frames to weight. Must be >= 1.
             
         Returns:
-            List of weights (sums to 1.0)
+            List[float]: List of weights that sum to 1.0. For 1 frame: [1.0],
+                for 2 frames: [0.4, 0.6], for 3+ frames: [0.25, 0.5, 0.25].
         """
         if num_frames == 1:
             return [1.0]
@@ -594,14 +656,24 @@ class MultimodalAnalyzer:
             return weights[:num_frames]
     
     def _process_audio_features(self, audio_features: Dict) -> Dict:
-        """
-        Process audio features to create audio context.
+        """Process audio features to create audio context.
+        
+        Analyzes audio feature values to classify the audio type and
+        compute normalized intensity and brightness values.
         
         Args:
-            audio_features: Dictionary of audio features
+            audio_features: Dictionary of audio features containing:
+                - rms_energy_mean (float): Root mean square energy.
+                - spectral_centroid_mean (float): Spectral centroid in Hz.
+                - zero_crossing_rate_mean (float): Zero crossing rate.
+                - tempo (float, optional): Detected tempo in BPM.
             
         Returns:
-            Audio context dictionary
+            Dict: Audio context containing:
+                - type (str): One of 'silent', 'bright', 'dark', 'dialog', 'balanced'.
+                - intensity (float): Normalized energy (0.0-1.0).
+                - brightness (float): Normalized spectral centroid (0.0-1.0).
+                - tempo (float): Tempo if available.
         """
         if not audio_features:
             return {'type': 'unknown', 'intensity': 0.5, 'brightness': 0.5}
@@ -630,15 +702,19 @@ class MultimodalAnalyzer:
         }
     
     def _fuse_multimodal(self, visual_attrs: Dict, audio_context: Dict) -> Dict:
-        """
-        Fuse visual and audio information.
+        """Fuse visual and audio information.
+        
+        Combines visual attribute scores with audio context to enhance
+        genre detection. Dark audio boosts suspense/darkness, bright audio
+        boosts intensity, and overall intensity is influenced by audio energy.
         
         Args:
-            visual_attrs: Visual attribute scores
-            audio_context: Audio context dictionary
+            visual_attrs: Dictionary of visual attribute scores (0.0-1.0).
+            audio_context: Audio context dictionary from _process_audio_features
+                containing 'type' and 'intensity' keys.
             
         Returns:
-            Fused attributes
+            Dict[str, float]: Fused attribute scores with values clamped to [0.0, 1.0].
         """
         fused = visual_attrs.copy()
         
@@ -657,15 +733,23 @@ class MultimodalAnalyzer:
         return fused
     
     def analyze_batch_parallel(self, shots_data: List[Dict]) -> List[Dict]:
-        """
-        Analyze multiple shots in parallel using true batched inference.
-        All shots are processed in a single model forward pass for maximum GPU utilization.
+        """Analyze multiple shots in parallel using true batched inference.
+        
+        Processes all shots in a single model forward pass for maximum GPU
+        utilization. Falls back to sequential processing if parallel batching
+        is disabled or if using native video mode.
         
         Args:
-            shots_data: List of shot dictionaries, each containing images/video and metadata
+            shots_data: List of shot dictionaries, each containing:
+                - images (List[str]): Base64 encoded images.
+                - audio_features (Dict, optional): Audio features for fusion.
+                - shot_id (str): Unique shot identifier.
             
         Returns:
-            List of analysis results, one per shot
+            List[Dict]: List of analysis results, one per shot, each containing:
+                - caption (str): Text description.
+                - attributes (Dict[str, float]): Genre attribute scores.
+                - processing_mode (str): 'keyframes_parallel' on success.
         """
         if not self.use_parallel_batching:
             # Fallback to sequential processing
@@ -829,11 +913,15 @@ class MultimodalAnalyzer:
             return [self.analyze_shot(shot) for shot in shots_data]
     
     def _empty_analysis(self) -> Dict:
-        """
-        Return empty analysis for failed requests.
+        """Return empty analysis for failed requests.
+        
+        Provides fallback values when analysis completely fails.
+        All attributes are set to 0.0 and caption indicates failure.
         
         Returns:
-            Dictionary with default values
+            Dict: Empty analysis containing:
+                - caption (str): 'Analysis failed' message.
+                - attributes (Dict[str, float]): All attributes set to 0.0.
         """
         # Use dynamically loaded attributes
         empty_attrs = {attr_name: 0.0 for attr_name in self.attributes.keys()}
@@ -845,14 +933,20 @@ class MultimodalAnalyzer:
 
 
 def process_vision_info(messages):
-    """
-    Process vision information from messages (helper function).
+    """Process vision information from messages.
+    
+    Extracts image and video content from chat messages for processing
+    by the Qwen VL model. This is a helper function used when preparing
+    inputs for the model.
     
     Args:
-        messages: Chat messages with images
+        messages: List of chat message dictionaries, each with a 'content'
+            key containing a list of content items with 'type' and data.
         
     Returns:
-        Tuple of (images, videos)
+        Tuple[List, List]: A tuple containing:
+            - image_inputs: List of extracted image objects.
+            - video_inputs: List of extracted video objects/paths.
     """
     image_inputs = []
     video_inputs = []

@@ -19,15 +19,14 @@ class AudioMixer:
     
     def __init__(self, config: Dict, genre_profile: Dict, output_dir: Path,
                  azure_client=None, enable_ducking: bool = True):
-        """
-        Initialize audio mixer.
-        
+        """Initialize audio mixer.
+
         Args:
-            config: Global configuration dictionary
-            genre_profile: Genre-specific configuration
-            output_dir: Base output directory
-            azure_client: Azure OpenAI client for AI features (optional)
-            enable_ducking: Whether to apply audio ducking
+            config: Global configuration dictionary.
+            genre_profile: Genre-specific configuration.
+            output_dir: Base output directory.
+            azure_client: Azure OpenAI client for AI features. Defaults to None.
+            enable_ducking: Whether to apply audio ducking. Defaults to True.
         """
         self.config = config
         self.genre_profile = genre_profile
@@ -59,17 +58,16 @@ class AudioMixer:
     
     def mix_audio(self, timeline: Dict, video_path: Path, output_path: Path,
                   music_file: Optional[str] = None) -> str:
-        """
-        Main audio mixing orchestrator.
-        
+        """Main audio mixing orchestrator.
+
         Args:
-            timeline: Timeline dictionary
-            video_path: Path to assembled video (without final audio)
-            output_path: Path for final output
-            music_file: Optional specific music file to use
-            
+            timeline: Timeline dictionary.
+            video_path: Path to assembled video (without final audio).
+            output_path: Path for final output.
+            music_file: Optional specific music file to use. Defaults to None.
+
         Returns:
-            Path to final video with mixed audio
+            str: Path to final video with mixed audio.
         """
         logger.info("Starting audio mixing...")
         
@@ -121,14 +119,13 @@ class AudioMixer:
         return str(final_video)
     
     def _extract_audio(self, video_path: Path) -> Optional[Path]:
-        """
-        Extract audio track from video.
-        
+        """Extract audio track from video.
+
         Args:
-            video_path: Input video path
-            
+            video_path: Input video path.
+
         Returns:
-            Path to extracted audio file or None if no audio
+            Optional[Path]: Path to extracted audio file, or None if no audio.
         """
         output_audio = self.temp_dir / 'original_audio.wav'
         
@@ -153,16 +150,15 @@ class AudioMixer:
     
     def _mix_with_ducking(self, music_file: str, original_audio: Optional[Path],
                           timeline: Dict) -> Path:
-        """
-        Mix music and original audio with ducking.
-        
+        """Mix music and original audio with ducking.
+
         Args:
-            music_file: Path to music file
-            original_audio: Path to original audio
-            timeline: Timeline dictionary
-            
+            music_file: Path to music file.
+            original_audio: Path to original audio.
+            timeline: Timeline dictionary.
+
         Returns:
-            Path to mixed audio file
+            Path: Path to mixed audio file.
         """
         output_audio = self.temp_dir / 'mixed_ducked.wav'
         
@@ -214,16 +210,15 @@ class AudioMixer:
     
     def _mix_simple(self, music_file: str, original_audio: Optional[Path],
                     timeline: Dict) -> Path:
-        """
-        Simple audio mix without ducking.
-        
+        """Simple audio mix without ducking.
+
         Args:
-            music_file: Path to music file
-            original_audio: Path to original audio
-            timeline: Timeline dictionary
-            
+            music_file: Path to music file.
+            original_audio: Path to original audio.
+            timeline: Timeline dictionary.
+
         Returns:
-            Path to mixed audio file
+            Path: Path to mixed audio file.
         """
         output_audio = self.temp_dir / 'mixed_simple.wav'
         
@@ -265,14 +260,13 @@ class AudioMixer:
             raise
     
     def _normalize_audio(self, audio_path: Path) -> Path:
-        """
-        Normalize audio to target LUFS.
-        
+        """Normalize audio to target LUFS.
+
         Args:
-            audio_path: Input audio path
-            
+            audio_path: Input audio path.
+
         Returns:
-            Path to normalized audio
+            Path: Path to normalized audio.
         """
         output_audio = self.temp_dir / 'normalized.wav'
         
@@ -296,16 +290,15 @@ class AudioMixer:
     
     def _mux_audio_video(self, video_path: Path, audio_path: Path,
                          output_path: Path) -> Path:
-        """
-        Mux audio with video to create final output.
-        
+        """Mux audio with video to create final output.
+
         Args:
-            video_path: Input video path
-            audio_path: Audio path to mux
-            output_path: Output path
-            
+            video_path: Input video path.
+            audio_path: Audio path to mux.
+            output_path: Output path.
+
         Returns:
-            Path to final video
+            Path: Path to final video.
         """
         cmd = [
             'ffmpeg',
@@ -330,15 +323,14 @@ class AudioMixer:
             raise
     
     def _use_original_audio_only(self, video_path: Path, output_path: Path) -> str:
-        """
-        Fallback: use video's original audio without music.
-        
+        """Use video's original audio without music as fallback.
+
         Args:
-            video_path: Input video path
-            output_path: Output path
-            
+            video_path: Input video path.
+            output_path: Output path.
+
         Returns:
-            Path to output video
+            str: Path to output video.
         """
         logger.info("Using original audio only (no music)")
         
@@ -359,11 +351,10 @@ class AudioMixer:
             raise
     
     def _cleanup_temp_files(self, file_paths: List[Optional[Path]]):
-        """
-        Clean up temporary audio files.
-        
+        """Clean up temporary audio files.
+
         Args:
-            file_paths: List of temporary file paths to delete
+            file_paths: List of temporary file paths to delete.
         """
         for path in file_paths:
             if path and path.exists():

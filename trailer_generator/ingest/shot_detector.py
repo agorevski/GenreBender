@@ -29,17 +29,20 @@ class ShotDetector:
                  overlap: int = 5, output_dir: str = "shots",
                  parallel_workers: int = 0, chunk_overlap: float = 5.0,
                  min_chunk_duration: float = 30.0):
-        """
-        Initialize shot detector.
-        
+        """Initialize shot detector.
+
         Args:
-            threshold: Content detection threshold (default: 27.0)
-            chunk_duration: Duration of each processing chunk in seconds (legacy)
-            overlap: Overlap duration between chunks (legacy)
-            output_dir: Directory to save shot segments
-            parallel_workers: Number of parallel workers (0 = auto-detect CPUs)
-            chunk_overlap: Overlap in seconds for parallel chunk processing
-            min_chunk_duration: Minimum duration per chunk in seconds (default: 30.0)
+            threshold: Content detection threshold. Defaults to 27.0.
+            chunk_duration: Duration of each processing chunk in seconds (legacy).
+                Defaults to 30.
+            overlap: Overlap duration between chunks (legacy). Defaults to 5.
+            output_dir: Directory to save shot segments. Defaults to "shots".
+            parallel_workers: Number of parallel workers. 0 means auto-detect
+                based on CPU count. Defaults to 0.
+            chunk_overlap: Overlap in seconds for parallel chunk processing.
+                Defaults to 5.0.
+            min_chunk_duration: Minimum duration per chunk in seconds.
+                Defaults to 30.0.
         """
         self.threshold = threshold
         self.chunk_duration = chunk_duration
@@ -56,17 +59,20 @@ class ShotDetector:
         
     def detect_shots(self, video_path: str, streaming: bool = True, 
                     frame_skip: int = 0, parallel: bool = True) -> List[Dict]:
-        """
-        Detect shots in video file using PySceneDetect.
-        
+        """Detect shots in video file using PySceneDetect.
+
         Args:
-            video_path: Path to input video file
-            streaming: If True, use optimized streaming detection (ignored if parallel=True)
-            frame_skip: Number of frames to skip
-            parallel: If True, use parallel chunk-based processing
-            
+            video_path: Path to input video file.
+            streaming: If True, use optimized streaming detection. Ignored if
+                parallel is True. Defaults to True.
+            frame_skip: Number of frames to skip during detection.
+                Defaults to 0.
+            parallel: If True, use parallel chunk-based processing.
+                Defaults to True.
+
         Returns:
-            List of shot dictionaries with metadata
+            List of shot dictionaries containing metadata such as start_time,
+            end_time, duration, start_frame, end_frame, file path, and keyframe.
         """
         if parallel and self.max_parallel_workers > 1:
             return self._detect_shots_parallel(video_path, frame_skip=frame_skip)
@@ -77,14 +83,17 @@ class ShotDetector:
     
     def _extraction_worker(self, video_path: str, extraction_queue: queue.Queue, 
                           stop_event: threading.Event, extracted_shots: Dict):
-        """
-        Background thread that extracts shots from queue as they arrive.
-        
+        """Background thread that extracts shots from queue as they arrive.
+
+        This worker runs in a separate thread and continuously processes shots
+        from the queue, extracting each as a video segment using FFmpeg.
+
         Args:
-            video_path: Path to source video
-            extraction_queue: Queue receiving shots to extract
-            stop_event: Event to signal worker should stop
-            extracted_shots: Shared dict mapping shot_id -> extracted file path
+            video_path: Path to source video file.
+            extraction_queue: Queue receiving shot dictionaries to extract.
+            stop_event: Threading event to signal worker should stop.
+            extracted_shots: Shared dict mapping shot_id to extracted file path.
+                Updated in-place as shots are extracted.
         """
         logger.info("Extraction worker thread started")
         extraction_count = 0
@@ -131,17 +140,20 @@ class ShotDetector:
     
     def _binary_search_cut_frame(self, video, detector, start_frame: int, 
                                  end_frame: int) -> int:
-        """
-        Use binary search to find the exact frame where a cut occurs.
-        
+        """Use binary search to find the exact frame where a cut occurs.
+
+        Performs binary search within a frame range to locate the precise
+        frame where a scene cut happens.
+
         Args:
-            video: Opened video object
-            detector: ContentDetector instance
-            start_frame: Start of range to search
-            end_frame: End of range (cut is known to be <= this frame)
-            
+            video: Opened video object from scenedetect.open_video().
+            detector: ContentDetector instance for detecting cuts.
+            start_frame: Start of range to search (inclusive).
+            end_frame: End of range to search. The cut is known to be at or
+                before this frame.
+
         Returns:
-            Exact frame number where cut occurs
+            Exact frame number where the cut occurs.
         """
         left, right = start_frame, end_frame
         
@@ -170,16 +182,21 @@ class ShotDetector:
     
     def _detect_shots_streaming(self, video_path: str, async_extraction: bool = True, 
                                frame_skip: int = 0) -> List[Dict]:
-        """
-        Detect shots using adaptive frame skipping with binary search refinement.
-        
-        Processes frames with coarse skip, then uses binary search to find exact
-        cut points. Queues shots immediately for parallel extraction.
-        
+        """Detect shots using adaptive frame skipping with binary search refinement.
+
+        Processes frames with a coarse skip interval, then uses binary search
+        to find exact cut points. Queues shots immediately for parallel
+        extraction in a background thread.
+
         Args:
-            video_path: Path to video file
-            async_extraction: If True, extract shots asynchronously during detection
-            frame_skip: Frames to skip in coarse pass (0=no skip, 10=check every 10th)
+            video_path: Path to video file.
+            async_extraction: If True, extract shots asynchronously during
+                detection using a background thread. Defaults to True.
+            frame_skip: Frames to skip in coarse pass. 0 means no skip,
+                10 means check every 10th frame. Defaults to 0.
+
+        Returns:
+            List of shot dictionaries with metadata and extracted file paths.
         """
         logger.info(f"Starting streaming shot detection on {video_path}")
         logger.info(f"Async extraction: {async_extraction}, Frame skip: {frame_skip}")
@@ -364,14 +381,20 @@ class ShotDetector:
     
     @staticmethod
     def _detect_chunk_worker(args: Tuple) -> Tuple[int, List[Dict]]:
-        """
-        Worker function for parallel chunk detection (must be static for multiprocessing).
-        
+        """Worker function for parallel chunk detection.
+
+        Must be static for multiprocessing compatibility. Detects shots
+        within a specified time range of the video.
+
         Args:
-            args: Tuple of (chunk_id, video_path, start_time, end_time, threshold)
-            
+            args: Tuple containing (chunk_id, video_path, start_time,
+                end_time, threshold) where chunk_id is the identifier for
+                this chunk, video_path is the path to the video file,
+                start_time and end_time define the time range in seconds,
+                and threshold is the content detection threshold.
+
         Returns:
-            Tuple of (chunk_id, list of detected shots)
+            Tuple of (chunk_id, list of detected shot dictionaries).
         """
         chunk_id, video_path, start_time, end_time, threshold = args
         
@@ -403,14 +426,21 @@ class ShotDetector:
     
     @staticmethod
     def _extract_shot_worker(args: Tuple) -> Tuple[int, Optional[str]]:
-        """
-        Worker function for parallel shot extraction (must be static for multiprocessing).
-        
+        """Worker function for parallel shot extraction.
+
+        Must be static for multiprocessing compatibility. Extracts a single
+        shot segment from the video using FFmpeg.
+
         Args:
-            args: Tuple of (shot_temp_id, video_path, start_time, duration, output_dir)
-            
+            args: Tuple containing (shot_temp_id, video_path, start_time,
+                duration, output_dir) where shot_temp_id is the temporary
+                identifier for this shot, video_path is the source video,
+                start_time is the shot start in seconds, duration is the
+                shot length in seconds, and output_dir is where to save.
+
         Returns:
-            Tuple of (shot_temp_id, extracted_file_path or None)
+            Tuple of (shot_temp_id, extracted_file_path) on success, or
+            (shot_temp_id, None) on failure.
         """
         shot_temp_id, video_path, start_time, duration, output_dir = args
         
@@ -440,16 +470,19 @@ class ShotDetector:
             return (shot_temp_id, None)
     
     def _detect_shots_parallel(self, video_path: str, frame_skip: int = 0) -> List[Dict]:
-        """
-        Detect shots using parallel chunk-based processing across multiple CPUs.
-        Uses adaptive parallelization based on video duration.
-        
+        """Detect shots using parallel chunk-based processing across multiple CPUs.
+
+        Uses adaptive parallelization based on video duration. Splits the video
+        into chunks, processes them in parallel, deduplicates overlapping shots,
+        and extracts all shots concurrently.
+
         Args:
-            video_path: Path to video file
-            frame_skip: Frames to skip (currently not used in parallel mode)
-            
+            video_path: Path to video file.
+            frame_skip: Frames to skip. Currently not used in parallel mode.
+                Defaults to 0.
+
         Returns:
-            List of deduplicated shot dictionaries with extracted files
+            List of deduplicated shot dictionaries with extracted file paths.
         """
         # Get video metadata
         video = open_video(video_path)
@@ -567,18 +600,22 @@ class ShotDetector:
     def _detect_chunk(self, video_path: str, start_time: float, 
                      end_time: float, extraction_queue: Optional[queue.Queue] = None,
                      temp_id_counter: Optional[Dict] = None) -> List[Dict]:
-        """
-        Detect shots within a specific time range with immediate extraction queuing.
-        
+        """Detect shots within a specific time range with immediate extraction queuing.
+
+        Uses PySceneDetect to find scene changes within the specified time
+        range and optionally queues detected shots for extraction.
+
         Args:
-            video_path: Path to video file
-            start_time: Start time in seconds
-            end_time: End time in seconds
-            extraction_queue: Optional queue for immediate shot extraction
-            temp_id_counter: Optional dict with 'value' key for tracking temp IDs
-            
+            video_path: Path to video file.
+            start_time: Start time in seconds for the detection range.
+            end_time: End time in seconds for the detection range.
+            extraction_queue: Optional queue for immediate shot extraction.
+                If provided, detected shots are added to this queue.
+            temp_id_counter: Optional dict with 'value' key for tracking
+                temporary IDs. Incremented for each shot detected.
+
         Returns:
-            List of shots detected in this chunk
+            List of shot dictionaries detected in this chunk.
         """
         # Create detector
         detector = ContentDetector(threshold=self.threshold)
@@ -607,14 +644,17 @@ class ShotDetector:
         return shots
     
     def _detect_shots_full(self, video_path: str) -> List[Dict]:
-        """
-        Detect all shots in video without chunking (for shorter videos).
-        
+        """Detect all shots in video without chunking.
+
+        Processes the entire video in a single pass. Best suited for
+        shorter videos where parallel processing overhead is not worthwhile.
+
         Args:
-            video_path: Path to video file
-            
+            video_path: Path to video file.
+
         Returns:
-            List of shot dictionaries
+            List of shot dictionaries containing id, start_time, end_time,
+            start_frame, end_frame, duration, file, and keyframe fields.
         """
         logger.info(f"Starting full video shot detection on {video_path}")
         
@@ -648,16 +688,17 @@ class ShotDetector:
         return shots
     
     def _deduplicate_shots(self, shots: List[Dict]) -> List[Dict]:
-        """
-        Remove duplicate shots detected in overlapping chunks.
-        
-        Strategy: Merge shots that are very close in time (within 0.1 second).
-        
+        """Remove duplicate shots detected in overlapping chunks.
+
+        Merges shots that are very close in time (within 0.1 second). When
+        duplicates are found, keeps the shot with longer duration.
+
         Args:
-            shots: List of all detected shots (may contain duplicates)
-            
+            shots: List of all detected shots, which may contain duplicates
+                from overlapping chunk processing.
+
         Returns:
-            Deduplicated list of shots with assigned IDs
+            Deduplicated list of shots with sequentially assigned IDs.
         """
         if not shots:
             return []
@@ -693,14 +734,16 @@ class ShotDetector:
     def _map_extracted_files(self, final_shots: List[Dict], 
                             temp_shots: List[Dict], 
                             extracted_files: Dict[int, str]):
-        """
-        Map extracted temporary files to final deduplicated shot IDs.
-        Renames files from shot_temp_XXXX.mp4 to shot_YYYY.mp4.
-        
+        """Map extracted temporary files to final deduplicated shot IDs.
+
+        Renames files from shot_temp_XXXX.mp4 to shot_YYYY.mp4 format,
+        matching temporary extractions to their final shot assignments.
+
         Args:
-            final_shots: Deduplicated shots with final IDs
-            temp_shots: Original shots with temp_ids
-            extracted_files: Dict mapping temp_id -> extracted file path
+            final_shots: Deduplicated shots with final IDs. Updated in-place
+                with 'file' field containing the renamed file path.
+            temp_shots: Original shots with temp_ids used during extraction.
+            extracted_files: Dict mapping temp_id to extracted file path.
         """
         logger.info("Mapping extracted files to final shot IDs...")
         
@@ -746,13 +789,14 @@ class ShotDetector:
     
     def _cleanup_temp_files(self, extracted_files: Dict[int, str], 
                            final_shots: List[Dict]):
-        """
-        Clean up temporary files that weren't mapped to final shots.
-        This happens when shots are deduplicated/merged.
-        
+        """Clean up temporary files that weren't mapped to final shots.
+
+        Removes orphaned temporary files that remain after deduplication
+        when some shots are merged or discarded.
+
         Args:
-            extracted_files: Dict of all extracted temp files
-            final_shots: List of final deduplicated shots
+            extracted_files: Dict mapping temp_id to extracted temp file paths.
+            final_shots: List of final deduplicated shots with mapped files.
         """
         # Get set of temp files that were successfully mapped
         mapped_files = {shot.get('file') for shot in final_shots if shot.get('file')}
@@ -773,12 +817,14 @@ class ShotDetector:
             logger.info(f"Cleaned up {deleted_count} unmapped temporary files")
     
     def _save_shot_metadata(self, shots: List[Dict], video_path: str):
-        """
-        Save shot metadata to JSON file.
-        
+        """Save shot metadata to JSON file.
+
+        Writes shot information to 'shot_metadata.json' in the output
+        directory, including source video reference and all shot details.
+
         Args:
-            shots: List of shot dictionaries
-            video_path: Original video path (for reference)
+            shots: List of shot dictionaries to save.
+            video_path: Original video path, stored for reference.
         """
         # Ensure shot_path field is populated from file field
         for shot in shots:
@@ -798,15 +844,19 @@ class ShotDetector:
         logger.info(f"Saved shot metadata to {metadata_path}")
     
     def extract_shot_segments(self, video_path: str, shots: List[Dict]) -> List[Dict]:
-        """
-        Extract individual shot segments as separate video files using FFmpeg.
-        
+        """Extract individual shot segments as separate video files using FFmpeg.
+
+        Uses stream copy mode for fast extraction without re-encoding.
+        Saves each shot as shot_XXXX.mp4 in the output directory.
+
         Args:
-            video_path: Path to source video
-            shots: List of shot dictionaries
-            
+            video_path: Path to source video file.
+            shots: List of shot dictionaries containing start_time and
+                duration information.
+
         Returns:
-            Updated shots list with file paths
+            Updated shots list with 'file' field populated with extracted
+            video segment paths.
         """
         import subprocess
         

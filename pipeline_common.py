@@ -100,7 +100,17 @@ def setup_logging(log_file: Path, level: str = 'INFO'):
     )
 
 def load_config(config_path: str = 'trailer_generator/config/settings.yaml') -> Dict:
-    """Load configuration from YAML file with environment variable overrides."""
+    """Load configuration from YAML file with environment variable overrides.
+
+    Loads the YAML configuration and overrides Azure OpenAI settings with
+    environment variables if present (AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY).
+
+    Args:
+        config_path: Path to the YAML configuration file.
+
+    Returns:
+        Configuration dictionary with environment variable overrides applied.
+    """
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
     
@@ -155,7 +165,18 @@ def get_movie_config(movie_key: str, config_path: str = 'config.yaml') -> Dict:
 
 def load_genre_profile(genre: str, 
                       profile_path: str = 'trailer_generator/config/genre_profiles.yaml') -> Dict:
-    """Load genre-specific configuration."""
+    """Load genre-specific configuration from profiles file.
+
+    Loads the genre profile from the YAML profiles file. Falls back to
+    'thriller' profile if the specified genre is not found.
+
+    Args:
+        genre: Target genre name (case-insensitive).
+        profile_path: Path to the genre profiles YAML file.
+
+    Returns:
+        Genre profile dictionary with 'name' key added for reference.
+    """
     with open(profile_path, 'r') as f:
         profiles = yaml.safe_load(f)
     

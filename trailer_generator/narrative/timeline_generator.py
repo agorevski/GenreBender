@@ -17,12 +17,11 @@ class TimelineGenerator:
     """
     
     def __init__(self, azure_client: AzureOpenAIClient, genre: str = 'thriller'):
-        """
-        Initialize timeline generator.
+        """Initialize timeline generator.
         
         Args:
-            azure_client: Azure OpenAI client instance
-            genre: Target genre for trailer
+            azure_client: Azure OpenAI client instance.
+            genre: Target genre for trailer. Defaults to 'thriller'.
         """
         self.azure_client = azure_client
         self.genre = genre
@@ -30,15 +29,14 @@ class TimelineGenerator:
     
     def generate_timeline(self, shots: List[Dict], 
                          target_duration: int = 90) -> Dict:
-        """
-        Generate complete trailer timeline from shots.
+        """Generate complete trailer timeline from shots.
         
         Args:
-            shots: List of top-scoring shots with analysis
-            target_duration: Target trailer duration in seconds
+            shots: List of top-scoring shots with analysis.
+            target_duration: Target trailer duration in seconds. Defaults to 90.
             
         Returns:
-            Timeline dictionary with shot sequence and music cues
+            Dict: Timeline dictionary with shot sequence and music cues.
         """
         # Check if we need chunked generation
         if len(shots) > 30:
@@ -50,15 +48,14 @@ class TimelineGenerator:
     
     def _generate_full_timeline(self, shots: List[Dict], 
                                target_duration: int) -> Dict:
-        """
-        Generate timeline in a single LLM call.
+        """Generate timeline in a single LLM call.
         
         Args:
-            shots: List of shots
-            target_duration: Target duration
+            shots: List of shots to include in the timeline.
+            target_duration: Target duration in seconds.
             
         Returns:
-            Timeline dictionary
+            Dict: Timeline dictionary containing shot sequence and music cues.
         """
         # Format prompt
         prompt_template = self.prompts.get_prompt(self.genre)
@@ -100,20 +97,19 @@ class TimelineGenerator:
     
     def _generate_chunked_timeline(self, shots: List[Dict],
                                   target_duration: int) -> Dict:
-        """
-        Generate timeline in chunks to avoid token limits.
+        """Generate timeline in chunks to avoid token limits.
         
         Strategy:
-        1. Divide shots into intro, middle, climax sections
-        2. Generate each section with context from previous
-        3. Merge sections into complete timeline
+            1. Divide shots into intro, middle, climax sections.
+            2. Generate each section with context from previous.
+            3. Merge sections into complete timeline.
         
         Args:
-            shots: List of shots
-            target_duration: Target duration
+            shots: List of shots to include in the timeline.
+            target_duration: Target duration in seconds.
             
         Returns:
-            Complete timeline dictionary
+            Dict: Complete timeline dictionary with all sections merged.
         """
         logger.info("Starting chunked timeline generation")
         
@@ -200,15 +196,17 @@ class TimelineGenerator:
         return self._validate_timeline(complete, shots)
     
     def _validate_timeline(self, timeline: Dict, shots: List[Dict]) -> Dict:
-        """
-        Validate and sanitize timeline.
+        """Validate and sanitize timeline.
+        
+        Filters out invalid shot IDs and calculates total duration.
         
         Args:
-            timeline: Generated timeline
-            shots: Available shots
+            timeline: Generated timeline dictionary to validate.
+            shots: Available shots with valid IDs.
             
         Returns:
-            Validated timeline
+            Dict: Validated timeline with invalid shots removed and total
+                duration calculated.
         """
         shot_ids = {s['id'] for s in shots}
         timeline_items = timeline.get('timeline', [])
@@ -234,15 +232,17 @@ class TimelineGenerator:
     
     def _create_fallback_timeline(self, shots: List[Dict], 
                                  target_duration: int) -> Dict:
-        """
-        Create simple fallback timeline if LLM generation fails.
+        """Create simple fallback timeline if LLM generation fails.
+        
+        Creates a basic timeline with progressive pacing: slower start,
+        medium pace in the middle, and fast climax.
         
         Args:
-            shots: List of shots
-            target_duration: Target duration
+            shots: List of shots to include in the timeline.
+            target_duration: Target duration in seconds.
             
         Returns:
-            Basic timeline dictionary
+            Dict: Basic timeline dictionary with shots and default music cues.
         """
         logger.warning("Creating fallback timeline")
         
@@ -279,13 +279,12 @@ class TimelineGenerator:
             'total_duration': cumulative_duration
         }
     
-    def export_timeline(self, timeline: Dict, output_path: str):
-        """
-        Export timeline to JSON file.
+    def export_timeline(self, timeline: Dict, output_path: str) -> None:
+        """Export timeline to JSON file.
         
         Args:
-            timeline: Timeline dictionary
-            output_path: Path to save JSON
+            timeline: Timeline dictionary to export.
+            output_path: Path to save JSON file.
         """
         with open(output_path, 'w') as f:
             json.dump(timeline, f, indent=2)

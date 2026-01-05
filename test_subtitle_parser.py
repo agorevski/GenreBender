@@ -13,6 +13,17 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utilities.subtitle_parser import SubtitleParser
 
 def main():
+    """Test the SubtitleParser utility by loading and analyzing an SRT file.
+
+    Loads a sample SRT file, displays parsing statistics including total entries,
+    word counts, and durations, then prints the full transcript.
+
+    Returns:
+        None
+
+    Raises:
+        SystemExit: If the SRT file fails to load.
+    """
     # Test file path
     srt_file = "test_files/Dumb.And.Dumber.1994.1080p.BluRay.x264-CiNEFiLE.ENG.srt"
     

@@ -14,23 +14,21 @@ class ShotSelector:
     """
     
     def __init__(self, target_count: int = 60):
-        """
-        Initialize shot selector.
+        """Initialize shot selector.
         
         Args:
-            target_count: Target number of shots to select
+            target_count: Target number of shots to select.
         """
         self.target_count = target_count
     
     def select_top_shots(self, shots: List[Dict]) -> List[Dict]:
-        """
-        Select top N shots by score.
+        """Select top N shots by score.
         
         Args:
-            shots: List of scored shots
+            shots: List of scored shots with 'score' key.
             
         Returns:
-            Top N shots, sorted by score (descending)
+            List[Dict]: Top N shots, sorted by score descending.
         """
         # Filter shots with valid scores
         valid_shots = [s for s in shots if 'score' in s and s['score'] > 0]
@@ -55,15 +53,14 @@ class ShotSelector:
     
     def select_diverse_shots(self, shots: List[Dict], 
                             temporal_diversity: float = 0.3) -> List[Dict]:
-        """
-        Select shots with temporal diversity to avoid clustering.
+        """Select shots with temporal diversity to avoid clustering.
         
         Args:
-            shots: List of scored shots
-            temporal_diversity: Minimum time gap (as fraction of total duration)
+            shots: List of scored shots with 'score' and 'start_time' keys.
+            temporal_diversity: Minimum time gap as a fraction of total duration.
             
         Returns:
-            Selected shots with temporal spacing
+            List[Dict]: Selected shots with temporal spacing, sorted by start time.
         """
         valid_shots = [s for s in shots if 'score' in s and s['score'] > 0]
         
@@ -102,15 +99,14 @@ class ShotSelector:
     
     def select_by_narrative_arc(self, shots: List[Dict], 
                                 arc_stages: List[str]) -> Dict[str, List[Dict]]:
-        """
-        Select shots organized by narrative arc stages.
+        """Select shots organized by narrative arc stages.
         
         Args:
-            shots: List of scored shots
-            arc_stages: List of arc stage names (e.g., ['intro', 'rising', 'climax'])
+            shots: List of scored shots with 'score' and 'start_time' keys.
+            arc_stages: List of arc stage names (e.g., ['intro', 'rising', 'climax']).
             
         Returns:
-            Dictionary mapping stage names to shot lists
+            Dict[str, List[Dict]]: Dictionary mapping stage names to shot lists.
         """
         valid_shots = [s for s in shots if 'score' in s and s['score'] > 0]
         
@@ -144,16 +140,15 @@ class ShotSelector:
     def filter_by_duration(self, shots: List[Dict], 
                           min_duration: float = 0.5,
                           max_duration: float = 10.0) -> List[Dict]:
-        """
-        Filter shots by duration constraints.
+        """Filter shots by duration constraints.
         
         Args:
-            shots: List of shots
-            min_duration: Minimum shot duration in seconds
-            max_duration: Maximum shot duration in seconds
+            shots: List of shots with 'duration' key.
+            min_duration: Minimum shot duration in seconds.
+            max_duration: Maximum shot duration in seconds.
             
         Returns:
-            Filtered shots
+            List[Dict]: Filtered shots within the duration range.
         """
         filtered = [
             s for s in shots
@@ -166,15 +161,14 @@ class ShotSelector:
     
     def balance_attributes(self, shots: List[Dict], 
                           target_attributes: Dict[str, tuple]) -> List[Dict]:
-        """
-        Select shots to balance specific attribute ranges.
+        """Select shots to balance specific attribute ranges.
         
         Args:
-            shots: List of scored shots
-            target_attributes: Dict mapping attribute to (min, max) target range
+            shots: List of scored shots with 'score' and 'analysis' keys.
+            target_attributes: Dict mapping attribute name to (min, max) target range.
             
         Returns:
-            Balanced selection of shots
+            List[Dict]: Balanced selection of shots matching attribute criteria.
         """
         valid_shots = [s for s in shots if 'score' in s]
         

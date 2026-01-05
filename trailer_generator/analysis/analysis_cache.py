@@ -33,11 +33,10 @@ class AnalysisCache:
         self.cache = self._load_cache()
     
     def _load_cache(self) -> Dict:
-        """
-        Load cache from disk.
+        """Load cache from disk.
         
         Returns:
-            Cache dictionary
+            Dict: Cache dictionary containing previously stored analysis results.
         """
         if not self.enabled:
             return {}
@@ -55,7 +54,11 @@ class AnalysisCache:
         return {}
     
     def _save_cache(self):
-        """Save cache to disk."""
+        """Save the current cache state to disk.
+        
+        Writes the cache dictionary to a JSON file. Does nothing if caching
+        is disabled. Logs an error if the save operation fails.
+        """
         if not self.enabled:
             return
         
@@ -67,14 +70,14 @@ class AnalysisCache:
             logger.error(f"Failed to save cache: {e}")
     
     def _compute_hash(self, keyframe_path: str) -> str:
-        """
-        Compute SHA-256 hash of keyframe image.
+        """Compute SHA-256 hash of keyframe image.
         
         Args:
-            keyframe_path: Path to keyframe image
+            keyframe_path: Path to the keyframe image file.
             
         Returns:
-            Hex string of hash
+            str: Hexadecimal string representation of the SHA-256 hash,
+                or empty string if hashing fails.
         """
         try:
             with open(keyframe_path, 'rb') as f:
@@ -85,14 +88,15 @@ class AnalysisCache:
             return ""
     
     def get(self, shot: Dict) -> Optional[Dict]:
-        """
-        Get cached analysis for a shot.
+        """Get cached analysis for a shot.
         
         Args:
-            shot: Shot dictionary with keyframe path
+            shot: Shot dictionary containing at least a 'keyframe' key
+                with the path to the keyframe image.
             
         Returns:
-            Cached analysis or None if not found
+            Optional[Dict]: The cached analysis dictionary if found,
+                or None if not in cache or caching is disabled.
         """
         if not self.enabled:
             return None
@@ -113,12 +117,12 @@ class AnalysisCache:
         return None
     
     def put(self, shot: Dict, analysis: Dict):
-        """
-        Store analysis result in cache.
+        """Store analysis result in cache.
         
         Args:
-            shot: Shot dictionary with keyframe path
-            analysis: Analysis result to cache
+            shot: Shot dictionary containing at least a 'keyframe' key
+                with the path to the keyframe image, and optionally an 'id'.
+            analysis: Analysis result dictionary to cache.
         """
         if not self.enabled:
             return
@@ -145,14 +149,16 @@ class AnalysisCache:
             self._save_cache()
     
     def get_batch(self, shots: list) -> tuple[list, list]:
-        """
-        Check cache for multiple shots at once.
+        """Check cache for multiple shots at once.
         
         Args:
-            shots: List of shot dictionaries
+            shots: List of shot dictionaries, each containing at least
+                a 'keyframe' key with the path to the keyframe image.
             
         Returns:
-            Tuple of (cached_shots, uncached_shots)
+            tuple[list, list]: A tuple containing:
+                - cached_shots: List of shots with their cached analysis added.
+                - uncached_shots: List of shots not found in cache.
         """
         cached = []
         uncached = []
@@ -171,11 +177,11 @@ class AnalysisCache:
         return cached, uncached
     
     def put_batch(self, shots: list):
-        """
-        Store multiple analysis results in cache.
+        """Store multiple analysis results in cache.
         
         Args:
-            shots: List of shot dictionaries with 'analysis' field
+            shots: List of shot dictionaries, each containing an 'analysis'
+                field with the analysis result to cache.
         """
         for shot in shots:
             if 'analysis' in shot:
@@ -185,18 +191,25 @@ class AnalysisCache:
         self._save_cache()
     
     def clear(self):
-        """Clear all cache entries."""
+        """Clear all cache entries.
+        
+        Removes all entries from the in-memory cache and deletes the
+        cache file from disk if it exists.
+        """
         self.cache = {}
         if self.cache_file.exists():
             self.cache_file.unlink()
         logger.info("Cache cleared")
     
     def get_stats(self) -> Dict:
-        """
-        Get cache statistics.
+        """Get cache statistics.
         
         Returns:
-            Dictionary with cache stats
+            Dict: Dictionary containing cache statistics with keys:
+                - total_entries: Number of cached entries.
+                - enabled: Whether caching is enabled.
+                - cache_file: Path to the cache file.
+                - size_bytes: Size of the cache file in bytes.
         """
         return {
             'total_entries': len(self.cache),
@@ -206,11 +219,11 @@ class AnalysisCache:
         }
     
     def prune_old_entries(self, days: int = 30):
-        """
-        Remove cache entries older than specified days.
+        """Remove cache entries older than specified days.
         
         Args:
-            days: Age threshold in days
+            days: Age threshold in days. Entries older than this will
+                be removed. Defaults to 30.
         """
         from datetime import timedelta
         

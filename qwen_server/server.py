@@ -33,6 +33,15 @@ security = HTTPBearer()
 
 # Load configuration
 def load_config():
+    """Load server configuration from YAML file.
+
+    Reads the config.yaml file from the same directory as this module
+    and parses it as YAML.
+
+    Returns:
+        dict: Configuration dictionary containing server, model, and
+            processing settings.
+    """
     config_path = os.path.join(os.path.dirname(__file__), 'config.yaml')
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
@@ -42,6 +51,20 @@ config = load_config()
 # Lifespan context manager for startup/shutdown
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Async context manager for FastAPI application lifespan events.
+
+    Handles startup and shutdown of the server, including model loading
+    and analyzer initialization.
+
+    Args:
+        app: The FastAPI application instance.
+
+    Yields:
+        None: Control is yielded to the application after startup completes.
+
+    Raises:
+        Exception: If model loading or analyzer initialization fails.
+    """
     # Startup
     global model, processor, analyzer
     logger.info("Starting QWEN server...")
@@ -109,17 +132,16 @@ class HealthResponse(BaseModel):
 
 # Authentication dependency
 def verify_api_key(credentials: HTTPAuthorizationCredentials = Security(security)):
-    """
-    Verify API key from Authorization header.
-    
+    """Verify API key from Authorization header.
+
     Args:
-        credentials: HTTP authorization credentials
-        
+        credentials: HTTP authorization credentials containing the bearer token.
+
     Returns:
-        Credentials if valid
-        
+        HTTPAuthorizationCredentials: The credentials if validation succeeds.
+
     Raises:
-        HTTPException: If API key is invalid
+        HTTPException: If the API key is invalid (401 Unauthorized).
     """
     expected_key = config['server']['api_key']
     
@@ -135,9 +157,14 @@ def verify_api_key(credentials: HTTPAuthorizationCredentials = Security(security
 # Health check endpoint (no auth required)
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
-    """
-    Health check endpoint to verify server is running.
+    """Check server health and return system information.
+
+    Provides health status along with model and GPU information.
     No authentication required.
+
+    Returns:
+        HealthResponse: Dictionary containing server status, model name,
+            device type, and optional GPU information (count and total memory).
     """
     import torch
     
@@ -163,16 +190,24 @@ async def analyze_shot(
     request: ShotAnalysisRequest,
     credentials: HTTPAuthorizationCredentials = Depends(verify_api_key)
 ):
-    """
-    Analyze a single shot with multiple frames and audio features.
+    """Analyze a single shot with multiple frames and audio features.
+
+    Processes either keyframe images or video data along with optional
+    audio features to generate a caption and attribute scores.
     Requires API key authentication.
-    
+
     Args:
-        request: Shot analysis request with images and audio features
-        credentials: API key credentials
-        
+        request: Shot analysis request containing images or video data,
+            audio features, and timing information.
+        credentials: API key credentials from the Authorization header.
+
     Returns:
-        Analysis result with caption and attribute scores
+        AnalysisResponse: Analysis result containing a caption and
+            attribute scores (suspense, darkness, ambiguity, etc.).
+
+    Raises:
+        HTTPException: 400 if request validation fails, 401 if unauthorized,
+            500 if analysis fails.
     """
     try:
         # Validate request - must have either images or video
@@ -215,16 +250,23 @@ async def analyze_batch(
     request: BatchAnalysisRequest,
     credentials: HTTPAuthorizationCredentials = Depends(verify_api_key)
 ):
-    """
-    Analyze multiple shots in a batch.
+    """Analyze multiple shots in a batch.
+
+    Processes multiple shots either sequentially or in parallel depending
+    on configuration. Validates all shots before processing.
     Requires API key authentication.
-    
+
     Args:
-        request: Batch analysis request with multiple shots
-        credentials: API key credentials
-        
+        request: Batch analysis request containing a list of shots to analyze.
+        credentials: API key credentials from the Authorization header.
+
     Returns:
-        Batch analysis results
+        BatchAnalysisResponse: Results containing a list of analysis results,
+            each with shot_id, caption, and attributes.
+
+    Raises:
+        HTTPException: 400 if batch validation fails or exceeds max size,
+            401 if unauthorized, 500 if analysis fails.
     """
     try:
         # Validate batch size
@@ -326,8 +368,14 @@ async def analyze_batch(
 # Root endpoint
 @app.get("/")
 async def root():
-    """
-    Root endpoint with API information.
+    """Return API information and available endpoints.
+
+    Provides basic information about the API including its name, version,
+    available endpoints, and authentication requirements.
+
+    Returns:
+        dict: API information containing name, version, endpoints mapping,
+            and authentication details.
     """
     return {
         "name": "Qwen2-VL Multimodal Shot Analyzer",

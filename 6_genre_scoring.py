@@ -15,6 +15,16 @@ from pipeline_common import (
 from trailer_generator.analysis import GenreScorer
 
 def main():
+    """Score shots based on target genre profile.
+    
+    This function loads shot metadata from previous pipeline stages,
+    applies genre-specific scoring weights to each shot, and saves
+    the updated metadata with genre scores.
+    
+    Raises:
+        SystemExit: If prerequisite stages are not completed, or if
+            the stage is already completed without --force flag.
+    """
     parser = argparse.ArgumentParser(
         description='Stage 5: Genre Scoring - Score shots based on genre profile'
     )

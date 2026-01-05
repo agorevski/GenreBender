@@ -26,7 +26,16 @@ logging.basicConfig(
 )
 
 def example_basic_usage():
-    """Basic usage example"""
+    """Demonstrate basic OMDB API usage.
+
+    Creates an OMDB client and fetches movie details for 'Dumb and Dumber',
+    displaying key information including title, year, genre, director, actors,
+    IMDb rating, runtime, and plot.
+
+    Raises:
+        OMDBError: If the API request fails.
+        OMDBNotFoundError: If the movie is not found.
+    """
     print("\n" + "="*70)
     print("EXAMPLE 1: Basic Usage")
     print("="*70)
@@ -47,7 +56,16 @@ def example_basic_usage():
     print(f"\nPlot:\n{movie.plot}")
 
 def example_with_cache():
-    """Example using cache system"""
+    """Demonstrate the OMDB cache system.
+
+    Shows how to use the OMDBCache class to cache API responses. The first
+    call fetches from the API while subsequent calls use the cached data.
+    Also displays cache statistics.
+
+    Raises:
+        OMDBError: If the API request fails.
+        OMDBNotFoundError: If the movie is not found.
+    """
     print("\n" + "="*70)
     print("EXAMPLE 2: Using Cache")
     print("="*70)
@@ -73,7 +91,16 @@ def example_with_cache():
     print(f"  Expired entries: {stats['expired_entries']}")
 
 def example_helper_properties():
-    """Example using helper properties"""
+    """Demonstrate OMDBMovie helper properties.
+
+    Shows how to use convenience properties on the OMDBMovie model such as
+    genres_list, actors_list, languages_list, runtime_minutes, imdb_rating_float,
+    metascore_int, and get_rating_by_source().
+
+    Raises:
+        OMDBError: If the API request fails.
+        OMDBNotFoundError: If the movie is not found.
+    """
     print("\n" + "="*70)
     print("EXAMPLE 3: Helper Properties")
     print("="*70)
@@ -98,7 +125,14 @@ def example_helper_properties():
     print(f"\nRotten Tomatoes rating: {rt_rating}")
 
 def example_search():
-    """Example searching for movies"""
+    """Demonstrate movie search functionality.
+
+    Shows how to search for movies by title using the search_movies method,
+    which returns a list of matching results from the OMDB API.
+
+    Raises:
+        OMDBError: If the API request fails.
+    """
     print("\n" + "="*70)
     print("EXAMPLE 4: Searching Movies")
     print("="*70)
@@ -114,7 +148,15 @@ def example_search():
         print(f"  {i}. {result['Title']} ({result['Year']}) - {result['Type']}")
 
 def example_search_by_imdb_id():
-    """Example searching by IMDb ID"""
+    """Demonstrate fetching a movie by IMDb ID.
+
+    Shows how to retrieve movie details using a specific IMDb ID instead
+    of searching by title.
+
+    Raises:
+        OMDBError: If the API request fails.
+        OMDBNotFoundError: If the movie is not found.
+    """
     print("\n" + "="*70)
     print("EXAMPLE 5: Search by IMDb ID")
     print("="*70)
@@ -127,7 +169,12 @@ def example_search_by_imdb_id():
     print(f"Found: {movie.title} ({movie.year})")
 
 def example_error_handling():
-    """Example error handling"""
+    """Demonstrate error handling patterns.
+
+    Shows how to handle OMDBNotFoundError when a movie doesn't exist, and
+    how to use the fallback method that returns None instead of raising
+    an exception.
+    """
     print("\n" + "="*70)
     print("EXAMPLE 6: Error Handling")
     print("="*70)
@@ -148,7 +195,16 @@ def example_error_handling():
         print("✓ Gracefully handled: Movie returned None")
 
 def example_year_filter():
-    """Example using year filter"""
+    """Demonstrate filtering movies by year.
+
+    Shows how to use the year parameter to distinguish between movies with
+    the same title released in different years, using 'Dune' (1984 vs 2021)
+    as an example.
+
+    Raises:
+        OMDBError: If the API request fails.
+        OMDBNotFoundError: If the movie is not found.
+    """
     print("\n" + "="*70)
     print("EXAMPLE 7: Year Filter")
     print("="*70)
@@ -167,7 +223,15 @@ def example_year_filter():
     print(f"Director: {dune_2021.director}")
 
 def example_data_conversion():
-    """Example converting to/from dictionary"""
+    """Demonstrate data conversion between OMDBMovie and dictionary.
+
+    Shows how to convert an OMDBMovie object to a dictionary using to_dict()
+    and reconstruct it from a dictionary using OMDBMovie.from_dict().
+
+    Raises:
+        OMDBError: If the API request fails.
+        OMDBNotFoundError: If the movie is not found.
+    """
     print("\n" + "="*70)
     print("EXAMPLE 8: Data Conversion")
     print("="*70)
@@ -188,7 +252,12 @@ def example_data_conversion():
     print(f"  Year: {reconstructed.year}")
 
 def main():
-    """Run all examples"""
+    """Run all OMDB API example demonstrations.
+
+    Executes each example function in sequence to demonstrate various
+    features of the OMDB API utilities. Catches and displays any OMDB
+    or unexpected errors that occur during execution.
+    """
     print("\n" + "="*70)
     print("OMDB API UTILITIES - EXAMPLE USAGE")
     print("="*70)

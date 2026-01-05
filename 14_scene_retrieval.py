@@ -33,7 +33,17 @@ logger = logging.getLogger(__name__)
 STAGE_NAME = "scene_retrieval"
 
 def parse_args():
-    """Parse command line arguments."""
+    """Parse command line arguments.
+
+    Returns:
+        argparse.Namespace: Parsed command line arguments containing:
+            - input (str): Input video file path.
+            - genre (str): Target trailer genre.
+            - movie_name (str): Movie name for beat sheet lookup.
+            - top_k (int): Number of candidate scenes per beat.
+            - force (bool): Force re-retrieval even if results exist.
+            - verbose (bool): Enable verbose logging.
+    """
     parser = argparse.ArgumentParser(
         description="Stage 14: Semantic scene retrieval for trailer beats"
     )
@@ -76,11 +86,25 @@ def parse_args():
     return parser.parse_args()
 
 def validate_inputs(args, output_dir: Path, genre_output_dir: Path) -> tuple:
-    """
-    Validate required input files exist.
-    
+    """Validate required input files exist.
+
+    Checks that embeddings, shot metadata, and beat sheet files are present
+    before proceeding with scene retrieval.
+
+    Args:
+        args: Parsed command line arguments containing input, genre, and
+            movie_name attributes.
+        output_dir: Base output directory for the video processing pipeline.
+        genre_output_dir: Genre-specific output directory containing embeddings.
+
     Returns:
-        Tuple of (embeddings_dir, beats_path, shot_metadata_path)
+        tuple: A tuple containing:
+            - embeddings_dir (Path): Directory containing scene and beat embeddings.
+            - beats_path (Path): Path to the genre-specific beat sheet JSON file.
+            - shot_metadata_path (Path): Path to the shot metadata JSON file.
+
+    Raises:
+        SystemExit: If any required input files are missing.
     """
     # Check embeddings (from stage 13) - now in genre-specific directory
     embeddings_dir = genre_output_dir / 'embeddings'
@@ -122,7 +146,18 @@ def validate_inputs(args, output_dir: Path, genre_output_dir: Path) -> tuple:
     return embeddings_dir, beats_path, shot_metadata_path
 
 def main():
-    """Main execution function."""
+    """Main execution function for scene retrieval.
+
+    Orchestrates the scene retrieval pipeline by:
+        1. Setting up logging and output directories.
+        2. Validating input files exist.
+        3. Loading configuration and scoring weights.
+        4. Retrieving and scoring candidate scenes for each beat.
+        5. Saving results and updating checkpoints.
+
+    Returns:
+        int: Exit code (0 for success, 1 for failure).
+    """
     args = parse_args()
     
     # Setup

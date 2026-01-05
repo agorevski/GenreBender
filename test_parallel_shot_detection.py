@@ -9,8 +9,15 @@ from pathlib import Path
 from trailer_generator.ingest import ShotDetector
 
 def test_parallel_detection():
-    """Test parallel shot detection on a sample video."""
-    
+    """Test parallel shot detection on a sample video.
+
+    Compares single-threaded streaming mode against multi-threaded parallel mode
+    to verify the parallel implementation works correctly and provides speedup.
+
+    Returns:
+        bool: True if the test passes (speedup > 1.5x or test completes for
+            short videos), False if no test video is found.
+    """
     # Find a test video
     test_videos = [
         "test_files/birds_short_film.mp4"

@@ -40,14 +40,19 @@ MODEL_FAMILY_PATTERNS = {
 
 
 def detect_model_family(model_name: str) -> str:
-    """
-    Detect model family from model name.
-    
+    """Detect model family from model name.
+
+    Analyzes the model name string to determine which Qwen VL family it
+    belongs to. Checks patterns in order from newest to oldest to avoid
+    false matches.
+
     Args:
-        model_name: HuggingFace model name (e.g., "Qwen/Qwen2.5-VL-7B-Instruct", "Qwen/Qwen3-VL-8B-Instruct")
-        
+        model_name: HuggingFace model name (e.g., "Qwen/Qwen2.5-VL-7B-Instruct",
+            "Qwen/Qwen3-VL-8B-Instruct").
+
     Returns:
-        Model family string (qwen2_vl, qwen2_5_vl, or qwen3_vl)
+        str: Model family string (qwen2_vl, qwen2_5_vl, or qwen3_vl).
+            Defaults to qwen3_vl if no pattern matches.
     """
     model_name_lower = model_name.lower()
     
@@ -64,14 +69,20 @@ def detect_model_family(model_name: str) -> str:
 
 
 def get_model_class(model_family: str):
-    """
-    Get the appropriate model class for the specified family.
-    
+    """Get the appropriate model class for the specified family.
+
+    Returns the correct transformers model class based on the model family.
+    Falls back to AutoModelForVision2Seq for older transformers versions.
+
     Args:
-        model_family: Model family string
-        
+        model_family: Model family string (qwen2_vl, qwen2_5_vl, or qwen3_vl).
+
     Returns:
-        Model class from transformers
+        type: Model class from transformers library suitable for the
+            specified model family.
+
+    Raises:
+        ValueError: If an unknown model family is provided.
     """
     if model_family == MODEL_FAMILY_QWEN2_VL:
         from transformers import Qwen2VLForConditionalGeneration
@@ -104,14 +115,16 @@ def get_model_class(model_family: str):
 
 
 def get_processor_class(model_family: str):
-    """
-    Get the appropriate processor class for the specified family.
-    
+    """Get the appropriate processor class for the specified family.
+
+    Returns the processor class for tokenizing and preprocessing inputs.
+    Currently returns AutoProcessor which works for all Qwen VL models.
+
     Args:
-        model_family: Model family string
-        
+        model_family: Model family string (qwen2_vl, qwen2_5_vl, or qwen3_vl).
+
     Returns:
-        Processor class from transformers
+        type: Processor class from transformers library (AutoProcessor).
     """
     # AutoProcessor works for all Qwen VL models
     from transformers import AutoProcessor
@@ -119,14 +132,20 @@ def get_processor_class(model_family: str):
 
 
 def check_gpu_compute_capability(min_capability: float = 7.0) -> Tuple[bool, float]:
-    """
-    Check if GPU supports the minimum compute capability.
-    
+    """Check if GPU supports the minimum compute capability.
+
+    Queries the primary CUDA device to determine its compute capability
+    and compares against the required minimum.
+
     Args:
-        min_capability: Minimum required compute capability
-        
+        min_capability: Minimum required compute capability. Defaults to 7.0
+            (Volta architecture).
+
     Returns:
-        Tuple of (is_supported, actual_capability)
+        tuple[bool, float]: A tuple containing:
+            - is_supported: True if GPU meets minimum capability.
+            - actual_capability: The actual compute capability of the GPU,
+              or 0.0 if CUDA is not available.
     """
     if not torch.cuda.is_available():
         return False, 0.0
@@ -147,11 +166,15 @@ class ModelLoader:
     """
     
     def __init__(self, config: dict):
-        """
-        Initialize model loader with configuration.
-        
+        """Initialize model loader with configuration.
+
+        Sets up model loading parameters including device, dtype, quantization
+        settings, and multi-GPU configuration based on the provided config.
+
         Args:
-            config: Configuration dictionary from config.yaml
+            config: Configuration dictionary from config.yaml containing model
+                settings including name, device, dtype, cache_dir, quantization
+                options, and data parallel settings.
         """
         self.model_name = config['model']['name']
         self.device = config['model']['device']
@@ -187,7 +210,12 @@ class ModelLoader:
         self._setup_dtype()
     
     def _setup_dtype(self):
-        """Set up torch dtype based on configuration."""
+        """Set up torch dtype based on configuration.
+
+        Converts the dtype string from configuration to the appropriate
+        torch dtype. For quantized models (int8/int4), uses the compute
+        dtype instead.
+        """
         dtype_map = {
             'float32': torch.float32,
             'float16': torch.float16,
@@ -208,11 +236,20 @@ class ModelLoader:
             self.torch_dtype = dtype_map.get(self.dtype, torch.float16)
     
     def _get_quantization_config(self):
-        """
-        Create BitsAndBytesConfig for quantization.
-        
+        """Create BitsAndBytesConfig for quantization.
+
+        Configures INT8 (LLM.int8()) or INT4 (NF4/FP4) quantization based on
+        the dtype setting. Validates GPU compute capability before enabling.
+
         Returns:
-            BitsAndBytesConfig or None if quantization not enabled/available
+            BitsAndBytesConfig | None: Configuration object for quantized
+                model loading, or None if quantization is not enabled.
+
+        Raises:
+            ImportError: If bitsandbytes is not installed but quantization
+                is requested.
+            RuntimeError: If GPU compute capability is insufficient for
+                the requested quantization type.
         """
         if not self.use_quantization:
             return None
@@ -260,12 +297,19 @@ class ModelLoader:
         return None
     
     def load_model(self) -> Tuple[Any, Any]:
-        """
-        Load the Qwen VL model and processor.
-        Downloads from HuggingFace if not cached.
-        
+        """Load the Qwen VL model and processor.
+
+        Downloads from HuggingFace Hub if not cached locally. Handles
+        quantization, DataParallel multi-GPU setup, and GPU optimizations.
+
         Returns:
-            Tuple of (model, processor)
+            tuple[Any, Any]: A tuple containing:
+                - model: The loaded Qwen VL model, possibly wrapped in
+                  DataParallel for multi-GPU inference.
+                - processor: The tokenizer/processor for the model.
+
+        Raises:
+            Exception: If model loading fails for any reason.
         """
         logger.info(f"Loading model: {self.model_name}")
         logger.info(f"Model family: {self.model_family}")
@@ -406,11 +450,13 @@ class ModelLoader:
             raise
     
     def verify_installation(self) -> bool:
-        """
-        Verify that the model can be loaded successfully.
-        
+        """Verify that the model can be loaded successfully.
+
+        Attempts to load the model and processor to confirm the installation
+        is working correctly.
+
         Returns:
-            True if successful, False otherwise
+            bool: True if the model loads successfully, False otherwise.
         """
         try:
             self.load_model()
@@ -421,11 +467,16 @@ class ModelLoader:
             return False
     
     def get_model_info(self) -> dict:
-        """
-        Get information about the loaded model.
-        
+        """Get information about the loaded model.
+
+        Returns metadata about the currently loaded model including device,
+        dtype, parameter count, quantization details, and GPU memory usage.
+
         Returns:
-            Dictionary with model information
+            dict: Dictionary containing model information with keys such as
+                model_name, model_family, device, dtype, parameters,
+                quantization_enabled, and GPU statistics if available.
+                Returns {"error": "Model not loaded"} if no model is loaded.
         """
         if self.model is None:
             return {"error": "Model not loaded"}
@@ -460,17 +511,20 @@ class ModelLoader:
 
 
 def download_model(model_name: str, cache_dir: str, model_family: str = MODEL_FAMILY_AUTO) -> bool:
-    """
-    Pre-download model to cache directory.
-    Useful for setup scripts.
-    
+    """Pre-download model to cache directory.
+
+    Downloads the model and processor from HuggingFace Hub to the specified
+    cache directory. Useful for setup scripts to pre-cache models before
+    running the server.
+
     Args:
-        model_name: HuggingFace model name
-        cache_dir: Cache directory path
-        model_family: Model family (auto-detected if not specified)
-        
+        model_name: HuggingFace model name (e.g., "Qwen/Qwen3-VL-8B-Instruct").
+        cache_dir: Local directory path for caching downloaded files.
+        model_family: Model family string for selecting the correct model
+            class. Defaults to MODEL_FAMILY_AUTO for automatic detection.
+
     Returns:
-        True if successful
+        bool: True if download completed successfully, False otherwise.
     """
     try:
         logger.info(f"Downloading model: {model_name}")

@@ -60,17 +60,25 @@ def run_stage_script(
     log_prefix: str = "",
     stream_output: bool = True
 ) -> Tuple[bool, str]:
-    """
-    Run a pipeline stage script as a subprocess.
+    """Run a pipeline stage script as a subprocess.
+    
+    Executes a Python script with the given arguments, optionally streaming
+    output to the console in real-time or capturing it for later processing.
     
     Args:
-        script_name: Name of the Python script to run
-        args: Command-line arguments to pass
-        log_prefix: Prefix for log messages
-        stream_output: If True, stream stdout/stderr to console in real-time
+        script_name: Name of the Python script to run (e.g., '1_shot_detection.py').
+        args: Command-line arguments to pass to the script.
+        log_prefix: Prefix string to prepend to log messages for identification.
+        stream_output: If True, stream stdout/stderr to console in real-time.
+            If False, capture output silently (useful for parallel execution).
         
     Returns:
-        Tuple of (success, output_message)
+        A tuple containing:
+            - bool: True if the script completed successfully (exit code 0).
+            - str: Status message describing the result or error details.
+    
+    Raises:
+        No exceptions are raised; errors are captured and returned in the tuple.
     """
     cmd = [sys.executable, script_name] + args
     
@@ -129,18 +137,25 @@ def run_genre_pipeline(
     config_path: str = 'trailer_generator/config/settings.yaml',
     stream_output: bool = True
 ) -> Tuple[str, bool, str]:
-    """
-    Run all genre-dependent stages for a single genre.
+    """Run all genre-dependent stages for a single genre.
+    
+    Executes the complete Phase 2 pipeline for a specific genre, including
+    beat sheet generation, embedding generation, scene retrieval, timeline
+    construction, video assembly, and audio mixing.
     
     Args:
-        genre: Target genre
-        video_path: Path to input video
-        movie_name: Movie name for story graph lookup
-        config_path: Path to settings.yaml
-        stream_output: If True, stream output to console in real-time
+        genre: Target genre for trailer generation (e.g., 'thriller', 'comedy').
+        video_path: Path to the input video file.
+        movie_name: Movie name used for story graph lookup and output naming.
+        config_path: Path to the settings.yaml configuration file.
+        stream_output: If True, stream output to console in real-time.
+            If False, capture output silently for parallel execution.
         
     Returns:
-        Tuple of (genre, success, message)
+        A tuple containing:
+            - str: The genre that was processed.
+            - bool: True if all stages completed successfully.
+            - str: Status message describing the result or failure point.
     """
     log_prefix = f"[{genre.upper()}] "
     
@@ -171,18 +186,21 @@ def run_phase1_stages(
     srt_path: str,
     force: bool = False
 ) -> bool:
-    """
-    Run Phase 1 (genre-agnostic) stages sequentially.
+    """Run Phase 1 (genre-agnostic) stages sequentially.
+    
+    Executes all genre-independent preprocessing stages including shot detection,
+    keyframe extraction, audio extraction, subtitle management, remote analysis,
+    and story graph generation.
     
     Args:
-        video_path: Path to input video
-        movie_name: Movie name
-        synopsis_path: Path to synopsis file
-        srt_path: Path to SRT subtitle file
-        force: Force re-run even if completed
+        video_path: Path to the input video file.
+        movie_name: Name of the movie for identification and output naming.
+        synopsis_path: Path to the text file containing the movie synopsis.
+        srt_path: Path to the SRT subtitle file for the video.
+        force: If True, force re-run of stages even if previously completed.
         
     Returns:
-        True if all stages succeeded
+        True if all Phase 1 stages completed successfully, False otherwise.
     """
     print("\n" + "=" * 70)
     print("PHASE 1: Genre-Agnostic Processing")
@@ -240,16 +258,20 @@ def run_phase2_sequential(
     video_path: str,
     movie_name: str
 ) -> Dict[str, bool]:
-    """
-    Run Phase 2 (genre-dependent) stages sequentially with full output streaming.
+    """Run Phase 2 (genre-dependent) stages sequentially with full output streaming.
+    
+    Processes each genre one at a time, streaming all output to the console.
+    This mode is useful for debugging as it provides full visibility into
+    each stage's execution. Processing stops immediately on any failure.
     
     Args:
-        genres: List of genres to process
-        video_path: Path to input video
-        movie_name: Movie name
+        genres: List of genre names to process (e.g., ['thriller', 'comedy']).
+        video_path: Path to the input video file.
+        movie_name: Name of the movie for story graph lookup and output naming.
         
     Returns:
-        Dictionary mapping genre to success status
+        A dictionary mapping each genre name to its success status (bool).
+        If a genre fails, subsequent genres may not be present in the dict.
     """
     print("\n" + "=" * 70)
     print(f"PHASE 2: Sequential Genre Processing ({len(genres)} genres)")
@@ -283,20 +305,21 @@ def run_phase2_parallel(
     movie_name: str,
     parallel_workers: int = 4
 ) -> Dict[str, bool]:
-    """
-    Run Phase 2 (genre-dependent) stages in parallel.
+    """Run Phase 2 (genre-dependent) stages in parallel.
     
-    Note: In parallel mode, output is captured rather than streamed to avoid
-    interleaving. Use --sequential for full output visibility.
+    Processes multiple genres concurrently using a process pool. Output is
+    captured rather than streamed to avoid interleaving between workers.
+    Use --sequential mode for full output visibility during debugging.
     
     Args:
-        genres: List of genres to process
-        video_path: Path to input video
-        movie_name: Movie name
-        parallel_workers: Number of parallel workers
+        genres: List of genre names to process (e.g., ['thriller', 'comedy']).
+        video_path: Path to the input video file.
+        movie_name: Name of the movie for story graph lookup and output naming.
+        parallel_workers: Maximum number of concurrent worker processes.
         
     Returns:
-        Dictionary mapping genre to success status
+        A dictionary mapping each genre name to its success status (bool).
+        If any genre fails, remaining jobs are cancelled and may not appear.
     """
     print("\n" + "=" * 70)
     print(f"PHASE 2: Parallel Genre Processing ({len(genres)} genres, {parallel_workers} workers)")
@@ -344,7 +367,20 @@ def run_phase2_parallel(
     return results
 
 
-def main():
+def main() -> None:
+    """Main entry point for the multi-genre trailer pipeline orchestrator.
+    
+    Parses command-line arguments and orchestrates the complete trailer
+    generation pipeline. Phase 1 runs genre-agnostic preprocessing stages,
+    and Phase 2 generates trailers for each specified genre either
+    sequentially or in parallel.
+    
+    The function handles configuration loading, input validation, and
+    provides a summary of results upon completion.
+    
+    Returns:
+        None. Exits with code 0 on success, 1 on failure.
+    """
     parser = argparse.ArgumentParser(
         description='Multi-Genre Trailer Pipeline Orchestrator',
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -118,14 +118,19 @@ class StoryGraphGenerator:
         return story_graph
     
     def _parse_subtitle_entries(self, subtitles_text: str) -> List[Dict]:
-        """
-        Parse subtitle text into structured entries.
+        """Parse subtitle text into structured entries.
+        
+        Parses raw subtitle text containing timestamps in [HH:MM:SS] format
+        and extracts individual entries with timing information.
         
         Args:
-            subtitles_text: Raw subtitle text with timestamps
+            subtitles_text: Raw subtitle text with timestamps in [HH:MM:SS] format.
         
         Returns:
-            List of dicts with 'start_time', 'end_time', 'text'
+            List of dictionaries, each containing:
+                - start_time (float): Start time in seconds.
+                - end_time (float): End time in seconds.
+                - text (str): The subtitle text content.
         """
         entries = []
         
@@ -161,16 +166,24 @@ class StoryGraphGenerator:
         return entries
     
     def _process_chunk_with_cache(self, chunk: Dict, chunk_index: int, total_chunks: int) -> Optional[Dict]:
-        """
-        Process a single chunk with cache checking (thread-safe).
+        """Process a single chunk with cache checking (thread-safe).
+        
+        Checks for cached analysis results before processing. If cached results
+        exist, returns them; otherwise, analyzes the chunk and caches the result.
         
         Args:
-            chunk: Chunk dict with transcript
-            chunk_index: Index of chunk (1-based for logging)
-            total_chunks: Total number of chunks
+            chunk: Chunk dictionary containing transcript data with keys:
+                - chunk_id (int): Unique identifier for the chunk.
+                - transcript (str): The subtitle text for this chunk.
+                - start_time (float): Start time in seconds.
+                - end_time (float): End time in seconds.
+                - entry_count (int): Number of subtitle entries in chunk.
+            chunk_index: 1-based index of the chunk for logging purposes.
+            total_chunks: Total number of chunks being processed.
         
         Returns:
-            Analysis dict or None if cached
+            Analysis dictionary containing extracted information (characters,
+            events, emotions, etc.), or None if analysis fails.
         """
         # Check cache first
         if self.cache_dir:
@@ -203,14 +216,28 @@ class StoryGraphGenerator:
             return None
     
     def _stage1_analyze_chunks(self, entries: List[Dict]) -> List[Dict]:
-        """
-        Stage 1: Analyze subtitle chunks in parallel.
+        """Stage 1: Analyze subtitle chunks in parallel.
+        
+        Splits subtitle entries into time-based chunks and processes them
+        in parallel using ThreadPoolExecutor for improved performance.
         
         Args:
-            entries: Parsed subtitle entries
+            entries: List of parsed subtitle entries, each containing:
+                - start_time (float): Start time in seconds.
+                - end_time (float): End time in seconds.
+                - text (str): The subtitle text content.
         
         Returns:
-            List of chunk analysis results
+            List of chunk analysis results sorted by chunk_id, each containing:
+                - chunk_id (int): Unique identifier for the chunk.
+                - time_range (str): Formatted time range string.
+                - characters_present (list): Character names identified.
+                - key_events (list): Key events in the chunk.
+                - dominant_emotions (list): Primary emotions conveyed.
+                - visual_inferences (list): Setting and atmosphere clues.
+                - genre_indicators (list): Genre-related keywords.
+                - notable_dialogue (list): Important dialogue lines.
+                - summary (str): Brief summary of the segment.
         """
         # Create chunks
         chunks = self.chunker.chunk_subtitle_entries(entries)
@@ -260,14 +287,32 @@ class StoryGraphGenerator:
         return results
     
     def _analyze_single_chunk(self, chunk: Dict) -> Dict:
-        """
-        Analyze a single subtitle chunk with GPT-4.
+        """Analyze a single subtitle chunk with GPT-4.
+        
+        Sends the chunk transcript to the Azure OpenAI API for analysis,
+        extracting structured information about characters, events, and emotions.
         
         Args:
-            chunk: Chunk dict with transcript
+            chunk: Chunk dictionary containing:
+                - chunk_id (int): Unique identifier for the chunk.
+                - transcript (str): The subtitle text for this chunk.
+                - start_time (float): Start time in seconds.
+                - end_time (float): End time in seconds.
         
         Returns:
-            Analysis dict with characters, events, emotions, etc.
+            Analysis dictionary containing:
+                - chunk_id (int): Unique identifier for the chunk.
+                - time_range (str): Formatted time range string.
+                - characters_present (list): Character names identified.
+                - key_events (list): Key events in the chunk.
+                - dominant_emotions (list): Primary emotions conveyed.
+                - visual_inferences (list): Setting and atmosphere clues.
+                - genre_indicators (list): Genre-related keywords.
+                - notable_dialogue (list): Important dialogue lines.
+                - summary (str): Brief summary of the segment.
+        
+        Raises:
+            Exception: If the API returns an empty response or invalid JSON.
         """
         system_prompt = """You are a film analysis expert. Analyze this movie segment and extract structured information."""
         
@@ -322,16 +367,30 @@ Be concise but thorough."""
         synopsis: str,
         chunk_analyses: List[Dict]
     ) -> Dict:
-        """
-        Stage 2: Synthesize complete story graph from chunk analyses.
+        """Stage 2: Synthesize complete story graph from chunk analyses.
+        
+        Combines individual chunk analyses with the movie synopsis to create
+        a coherent story graph with characters, themes, plot structure, and
+        scene timeline.
         
         Args:
-            movie_name: Movie title
-            synopsis: Movie synopsis
-            chunk_analyses: Results from stage 1
+            movie_name: The title of the movie being analyzed.
+            synopsis: Movie synopsis or plot summary text.
+            chunk_analyses: List of analysis results from stage 1, each
+                containing chunk_id, time_range, characters, events, etc.
         
         Returns:
-            Complete story graph
+            Complete story graph dictionary containing:
+                - title (str): Movie title.
+                - logline (str): 1-2 sentence conflict summary.
+                - characters (list): Character profiles with relationships.
+                - major_themes (list): Abstract themes identified.
+                - plot_structure (dict): Setup, inciting incident, rising
+                    action, climax, and resolution.
+                - scene_timeline (list): Chronological scene breakdowns.
+        
+        Raises:
+            Exception: If the API returns an empty response or invalid JSON.
         """
         # Build synthesis prompt (exclude notable_dialogue to avoid content filtering)
         chunk_summaries = "\n\n".join([
@@ -460,14 +519,22 @@ Synthesize all segments into coherent scenes. Merge related segments into scenes
             raise Exception(f"Failed to parse JSON response in narrative synthesis: {e}")
     
     def _stage3_generate_emotional_arc(self, scene_timeline: List[Dict]) -> List[Dict]:
-        """
-        Stage 3: Generate emotional intensity arc from scene timeline.
+        """Stage 3: Generate emotional intensity arc from scene timeline.
+        
+        Analyzes the scene timeline to create an emotional intensity curve
+        that tracks the emotional flow throughout the movie.
         
         Args:
-            scene_timeline: Scenes from stage 2
+            scene_timeline: List of scene dictionaries from stage 2, each
+                containing scene_id, dominant_emotion, summary, and other
+                scene metadata.
         
         Returns:
-            Emotional arc with scene_id, emotion, intensity
+            List of emotional arc entries, each containing:
+                - scene_id (int): Reference to the corresponding scene.
+                - emotion (str): Dominant emotion label (e.g., 'calm', 'tense').
+                - intensity (float): Emotional intensity on a 0-1 scale.
+            Returns an empty list if scene_timeline is empty or API fails.
         """
         if not scene_timeline:
             return []
@@ -514,7 +581,11 @@ Consider narrative pacing and emotional flow."""
             return []
     
     def _clear_cache(self):
-        """Clear chunk analysis cache."""
+        """Clear chunk analysis cache.
+        
+        Removes all cached chunk analysis JSON files from the cache directory.
+        Only deletes files matching the pattern 'chunk_*.json'.
+        """
         if self.cache_dir and self.cache_dir.exists():
             for cache_file in self.cache_dir.glob("chunk_*.json"):
                 cache_file.unlink()

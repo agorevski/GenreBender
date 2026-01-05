@@ -39,6 +39,24 @@ def create_skipped_analysis(reason: str, min_duration: float = None) -> dict:
     }
 
 def main():
+    """Execute Stage 5: Remote Analysis pipeline.
+
+    Performs multimodal analysis using Qwen2-VL server on extracted keyframes.
+    Supports single or multi-server configurations, caching for resume capability,
+    and filters shots by minimum duration threshold.
+
+    The function:
+        1. Validates prerequisite stages (shot_detection, keyframe_extraction, audio_extraction)
+        2. Loads shot metadata and filters by minimum duration
+        3. Checks cache for previously analyzed shots
+        4. Initializes analyzer (single or multi-server based on config)
+        5. Batch processes uncached shots through Qwen2-VL
+        6. Saves analysis results to metadata and marks stage complete
+
+    Raises:
+        SystemExit: If prerequisites not met, already completed (without --force),
+            or server health check fails.
+    """
     parser = argparse.ArgumentParser(
         description='Stage 5: Remote Analysis - Multimodal analysis with Qwen2-VL (genre-agnostic)'
     )

@@ -156,14 +156,23 @@ class EmbeddingGenerator:
         shot: Dict,
         scene_context: Dict
     ) -> str:
-        """
-        Build rich text representation for a shot/scene.
+        """Build rich text representation for a shot/scene.
         
         Combines multiple information sources:
         1. Visual analysis (caption, attributes)
         2. Audio features (energy, mood)
         3. Story context (characters, emotions, events)
         4. Temporal position in narrative
+
+        Args:
+            shot: Shot dictionary containing caption, attributes, audio_features,
+                start_time, and duration.
+            scene_context: Dictionary mapping timestamps to scene context info
+                including characters, events, emotions, and genre indicators.
+
+        Returns:
+            A period-separated string combining all available shot information
+            for embedding generation.
         """
         parts = []
         
@@ -244,8 +253,15 @@ class EmbeddingGenerator:
         return '. '.join(parts)
     
     def _build_beat_text(self, beat: Dict) -> str:
-        """
-        Build text representation for a beat (fallback if no embedding_prompt).
+        """Build text representation for a beat (fallback if no embedding_prompt).
+
+        Args:
+            beat: Beat dictionary containing description, target_emotion,
+                visual_requirements, audio_cue, and voiceover fields.
+
+        Returns:
+            A period-separated string combining available beat information
+            for embedding generation.
         """
         parts = []
         
@@ -273,11 +289,17 @@ class EmbeddingGenerator:
         return '. '.join(parts)
     
     def _build_scene_context_map(self, story_graph: Dict) -> Dict:
-        """
-        Build mapping from timestamp to scene context.
-        
+        """Build mapping from timestamp to scene context.
+
+        Args:
+            story_graph: Story graph dictionary containing scene_timeline
+                with scene metadata including timestamps, characters,
+                events, and emotions.
+
         Returns:
-            Dict mapping start_time (seconds) to scene info
+            Dictionary mapping start_time in seconds to scene info containing
+            scene_id, summary, key_events, characters_present, dominant_emotion,
+            genre_indicators, and visual_inferences.
         """
         context_map = {}
         
@@ -299,7 +321,14 @@ class EmbeddingGenerator:
         return context_map
     
     def _parse_timestamp(self, timestamp: str) -> float:
-        """Convert HH:MM:SS or MM:SS to seconds."""
+        """Convert timestamp string to seconds.
+
+        Args:
+            timestamp: Time string in HH:MM:SS, MM:SS, or SS format.
+
+        Returns:
+            Total seconds as a float.
+        """
         parts = timestamp.split(':')
         if len(parts) == 3:
             h, m, s = map(float, parts)
@@ -318,11 +347,21 @@ class EmbeddingGenerator:
         entity_type: str,
         total_count: int
     ) -> Tuple[int, List[List[float]]]:
-        """
-        Process a single batch of texts (for parallel execution).
-        
+        """Process a single batch of texts for embedding generation.
+
+        Calls the Azure OpenAI embeddings API for a batch of texts and logs
+        progress. Used for both serial and parallel execution modes.
+
+        Args:
+            batch: List of text strings to embed in this batch.
+            batch_num: Current batch number (1-indexed) for ordering.
+            num_batches: Total number of batches for progress display.
+            entity_type: Type of entity being embedded (e.g., "scene", "beat").
+            total_count: Total number of items across all batches.
+
         Returns:
-            Tuple of (batch_num, embeddings)
+            Tuple of (batch_num, embeddings) where embeddings is a list of
+            embedding vectors. On error, returns zero vectors as fallback.
         """
         try:
             # Call Azure OpenAI embeddings API
@@ -397,7 +436,18 @@ class EmbeddingGenerator:
         entity_type: str,
         total_count: int
     ) -> np.ndarray:
-        """Serial execution of embedding generation."""
+        """Execute embedding generation serially (one batch at a time).
+
+        Args:
+            batches: List of tuples containing (batch_texts, batch_number).
+            num_batches: Total number of batches for progress display.
+            entity_type: Type of entity being embedded (e.g., "scene", "beat").
+            total_count: Total number of items across all batches.
+
+        Returns:
+            Numpy array of shape (n_texts, embedding_dim) containing all
+            embeddings in order.
+        """
         all_embeddings = []
         
         for batch, batch_num in batches:
@@ -415,11 +465,20 @@ class EmbeddingGenerator:
         entity_type: str,
         total_count: int
     ) -> np.ndarray:
-        """
-        Parallel execution of embedding generation using ThreadPoolExecutor.
-        
+        """Execute embedding generation in parallel using ThreadPoolExecutor.
+
+        Submits all batches concurrently and reassembles results in correct
+        order using batch numbers as keys.
+
+        Args:
+            batches: List of tuples containing (batch_texts, batch_number).
+            num_batches: Total number of batches for progress display.
+            entity_type: Type of entity being embedded (e.g., "scene", "beat").
+            total_count: Total number of items across all batches.
+
         Returns:
-            Numpy array of embeddings in correct order
+            Numpy array of shape (n_texts, embedding_dim) containing all
+            embeddings in correct order regardless of completion order.
         """
         logger.info(f"Using parallel execution with {self.parallel_workers} workers")
         

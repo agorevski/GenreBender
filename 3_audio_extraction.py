@@ -16,6 +16,15 @@ from trailer_generator.checkpoint import load_shots_from_metadata, save_shots_to
 from trailer_generator.ingest import AudioExtractor
 
 def main():
+    """Extract audio features (MFCC, spectral) for each detected shot.
+
+    This function orchestrates Stage 3 of the pipeline, loading shot metadata
+    from previous stages, extracting audio features using librosa, and saving
+    the updated metadata with audio feature information.
+
+    Raises:
+        SystemExit: If prerequisite stages are not completed, or on fatal errors.
+    """
     parser = argparse.ArgumentParser(
         description='Stage 3: Audio Extraction - Extract audio features per shot (genre-agnostic)'
     )

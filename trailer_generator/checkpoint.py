@@ -49,18 +49,22 @@ class CheckpointManager:
     STAGES = GENRE_AGNOSTIC_STAGES + LEGACY_STAGES + GENRE_DEPENDENT_STAGES
     
     def __init__(self, checkpoint_path: Path):
-        """
-        Initialize checkpoint manager.
-        
+        """Initialize checkpoint manager.
+
         Args:
-            checkpoint_path: Path to checkpoint file
+            checkpoint_path: Path to the checkpoint file for storing pipeline state.
         """
         self.checkpoint_path = checkpoint_path
         self.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         self.data = self._load()
     
     def _load(self) -> Dict:
-        """Load checkpoint from disk."""
+        """Load checkpoint from disk.
+
+        Returns:
+            Dict: The checkpoint data loaded from disk, or an empty checkpoint
+                structure if loading fails or file doesn't exist.
+        """
         if self.checkpoint_path.exists():
             try:
                 with open(self.checkpoint_path, 'r') as f:
@@ -75,7 +79,14 @@ class CheckpointManager:
         return self._create_empty()
     
     def _migrate_checkpoint(self, data: Dict) -> Dict:
-        """Migrate old checkpoint format to new format with per-genre support."""
+        """Migrate old checkpoint format to new format with per-genre support.
+
+        Args:
+            data: The checkpoint data dictionary to migrate.
+
+        Returns:
+            Dict: The migrated checkpoint data with updated version and structure.
+        """
         version = data.get('version', '1.0')
         
         if version == '1.0':
@@ -88,7 +99,12 @@ class CheckpointManager:
         return data
     
     def _create_empty(self) -> Dict:
-        """Create empty checkpoint structure."""
+        """Create empty checkpoint structure.
+
+        Returns:
+            Dict: A new empty checkpoint dictionary with initialized fields
+                including version, timestamps, and empty stage tracking.
+        """
         return {
             'version': '2.0',
             'created_at': datetime.now().isoformat(),
@@ -100,7 +116,11 @@ class CheckpointManager:
         }
     
     def save(self):
-        """Save checkpoint to disk."""
+        """Save checkpoint to disk.
+
+        Updates the 'updated_at' timestamp and writes the checkpoint data
+        to the configured checkpoint path as JSON.
+        """
         try:
             self.data['updated_at'] = datetime.now().isoformat()
             with open(self.checkpoint_path, 'w') as f:
@@ -110,18 +130,21 @@ class CheckpointManager:
             logger.error(f"Failed to save checkpoint: {e}")
     
     def reload(self):
-        """Reload checkpoint from disk to get latest state (useful in parallel execution)."""
+        """Reload checkpoint from disk to get latest state.
+
+        Useful in parallel execution scenarios where the checkpoint file
+        may have been updated by another process.
+        """
         self.data = self._load()
         logger.debug(f"Reloaded checkpoint from {self.checkpoint_path}")
     
     def mark_stage_completed(self, stage: str, metadata: Optional[Dict] = None, genre: Optional[str] = None):
-        """
-        Mark a stage as completed.
-        
+        """Mark a stage as completed.
+
         Args:
-            stage: Stage name
-            metadata: Optional metadata about stage completion
-            genre: Genre for genre-dependent stages (None for genre-agnostic)
+            stage: Name of the stage to mark as completed.
+            metadata: Optional metadata about stage completion to store.
+            genre: Genre for genre-dependent stages. Use None for genre-agnostic stages.
         """
         # Determine if this is a genre-dependent stage
         is_genre_dependent = stage in self.GENRE_DEPENDENT_STAGES
@@ -151,13 +174,12 @@ class CheckpointManager:
             logger.info(f"✓ Checkpoint: Completed stage '{stage}'")
     
     def _mark_genre_stage_completed(self, stage: str, genre: str, metadata: Optional[Dict] = None):
-        """
-        Mark a genre-dependent stage as completed for a specific genre.
-        
+        """Mark a genre-dependent stage as completed for a specific genre.
+
         Args:
-            stage: Stage name
-            genre: Target genre
-            metadata: Optional metadata
+            stage: Name of the stage to mark as completed.
+            genre: Target genre (will be lowercased).
+            metadata: Optional metadata to store with the completion record.
         """
         genre = genre.lower()
         
@@ -175,15 +197,14 @@ class CheckpointManager:
             self.data['genre_stages'][genre][stage].update(metadata)
     
     def is_stage_completed(self, stage: str, genre: Optional[str] = None) -> bool:
-        """
-        Check if a stage is completed.
-        
+        """Check if a stage is completed.
+
         Args:
-            stage: Stage name
-            genre: Genre for genre-dependent stages (None for genre-agnostic)
-            
+            stage: Name of the stage to check.
+            genre: Genre for genre-dependent stages. Use None for genre-agnostic stages.
+
         Returns:
-            True if stage is completed
+            bool: True if the stage is completed, False otherwise.
         """
         # Check if this is a genre-dependent stage
         is_genre_dependent = stage in self.GENRE_DEPENDENT_STAGES
@@ -202,15 +223,14 @@ class CheckpointManager:
         return self.data['stages'][stage].get('completed', False)
     
     def _is_genre_stage_completed(self, stage: str, genre: str) -> bool:
-        """
-        Check if a genre-dependent stage is completed for a specific genre.
-        
+        """Check if a genre-dependent stage is completed for a specific genre.
+
         Args:
-            stage: Stage name
-            genre: Target genre
-            
+            stage: Name of the stage to check.
+            genre: Target genre to check (will be lowercased).
+
         Returns:
-            True if completed for this genre
+            bool: True if the stage is completed for this genre, False otherwise.
         """
         genre = genre.lower()
         
@@ -223,14 +243,13 @@ class CheckpointManager:
         return self.data['genre_stages'][genre][stage].get('completed', False)
     
     def get_completed_genres(self, stage: str) -> List[str]:
-        """
-        Get list of genres that have completed a specific stage.
-        
+        """Get list of genres that have completed a specific stage.
+
         Args:
-            stage: Stage name
-            
+            stage: Name of the stage to check.
+
         Returns:
-            List of genre names that have completed this stage
+            List[str]: List of genre names that have completed this stage.
         """
         completed = []
         for genre, stages in self.data.get('genre_stages', {}).items():
@@ -239,32 +258,39 @@ class CheckpointManager:
         return completed
     
     def get_incomplete_genres(self, stage: str, target_genres: List[str]) -> List[str]:
-        """
-        Get list of genres that have NOT completed a specific stage.
-        
+        """Get list of genres that have NOT completed a specific stage.
+
         Args:
-            stage: Stage name
-            target_genres: List of genres to check
-            
+            stage: Name of the stage to check.
+            target_genres: List of genres to check against.
+
         Returns:
-            List of genre names that have NOT completed this stage
+            List[str]: List of genre names that have NOT completed this stage.
         """
         completed = set(self.get_completed_genres(stage))
         return [g for g in target_genres if g.lower() not in completed]
     
     def get_last_completed_stage(self) -> Optional[str]:
-        """Get the last completed stage."""
+        """Get the last completed stage.
+
+        Returns:
+            Optional[str]: The name of the last completed stage, or None if
+                no stages have been completed.
+        """
         return self.data.get('last_completed_stage')
     
     def get_resume_stage(self, requested_stage: Optional[str] = None) -> Optional[str]:
-        """
-        Determine which stage to resume from.
-        
+        """Determine which stage to resume from.
+
+        If a specific stage is requested, validates and returns it. Otherwise,
+        auto-detects the next uncompleted stage after the last completed one.
+
         Args:
-            requested_stage: User-requested stage to resume from
-            
+            requested_stage: User-requested stage to resume from. If None,
+                auto-detection is used.
+
         Returns:
-            Stage name to resume from, or None to start from beginning
+            Optional[str]: Stage name to resume from, or None to start from beginning.
         """
         if requested_stage:
             if requested_stage not in self.STAGES:
@@ -290,32 +316,33 @@ class CheckpointManager:
         return None
     
     def should_skip_stage(self, stage: str, force: bool = False, genre: Optional[str] = None) -> bool:
-        """
-        Determine if a stage should be skipped.
-        
+        """Determine if a stage should be skipped.
+
         Args:
-            stage: Stage name
-            force: Force re-run even if completed
-            genre: Genre for genre-dependent stages
-            
+            stage: Name of the stage to check.
+            force: If True, never skip (force re-run even if completed).
+            genre: Genre for genre-dependent stages.
+
         Returns:
-            True if stage should be skipped
+            bool: True if the stage should be skipped, False otherwise.
         """
         if force:
             return False
         return self.is_stage_completed(stage, genre)
     
     def validate_resume(self, resume_from: str, input_file: str, genre: Optional[str] = None) -> bool:
-        """
-        Validate that we can resume from the specified stage.
-        
+        """Validate that we can resume from the specified stage.
+
+        Checks that the stage is valid, the input file matches (with warning if not),
+        and all prerequisite stages have been completed.
+
         Args:
-            resume_from: Stage to resume from
-            input_file: Current input file
-            genre: Current genre (optional)
-            
+            resume_from: Name of the stage to resume from.
+            input_file: Current input file path to validate against checkpoint.
+            genre: Current genre (optional, for logging purposes).
+
         Returns:
-            True if resume is valid
+            bool: True if resume is valid and can proceed, False otherwise.
         """
         if resume_from not in self.STAGES:
             logger.error(f"Invalid stage: {resume_from}")
@@ -342,12 +369,11 @@ class CheckpointManager:
         return True
     
     def set_metadata(self, input_file: str, genre: Optional[str] = None):
-        """
-        Set checkpoint metadata.
-        
+        """Set checkpoint metadata.
+
         Args:
-            input_file: Input video file
-            genre: Trailer genre (optional for genre-agnostic stages)
+            input_file: Path to the input video file.
+            genre: Trailer genre (optional for genre-agnostic stages).
         """
         self.data['input_file'] = input_file
         if genre:
@@ -355,17 +381,23 @@ class CheckpointManager:
         self.save()
     
     def reset(self):
-        """Reset checkpoint to empty state."""
+        """Reset checkpoint to empty state.
+
+        Clears all checkpoint data and saves a fresh empty checkpoint
+        to disk.
+        """
         self.data = self._create_empty()
         self.save()
         logger.info("Checkpoint reset")
     
     def reset_genre(self, genre: str):
-        """
-        Reset all stages for a specific genre.
-        
+        """Reset all stages for a specific genre.
+
+        Removes all completion records for the specified genre and saves
+        the checkpoint.
+
         Args:
-            genre: Genre to reset
+            genre: Genre to reset (will be lowercased).
         """
         genre = genre.lower()
         if genre in self.data.get('genre_stages', {}):
@@ -374,14 +406,21 @@ class CheckpointManager:
             logger.info(f"Reset checkpoint for genre '{genre}'")
     
     def get_stats(self, genre: Optional[str] = None) -> Dict:
-        """
-        Get checkpoint statistics.
-        
+        """Get checkpoint statistics.
+
         Args:
-            genre: If provided, include genre-specific stats
-            
+            genre: If provided, include genre-specific completion stats.
+
         Returns:
-            Dictionary of checkpoint statistics
+            Dict: Dictionary containing checkpoint statistics including:
+                - total_stages: Total number of stages
+                - completed_stages: Number of completed stages
+                - progress_percent: Completion percentage
+                - last_completed: Name of last completed stage
+                - completed_list: List of completed stage names
+                - agnostic_completed: List of completed genre-agnostic stages
+                - genre_completed: List of completed genre-dependent stages
+                - genre: The genre these stats are for
         """
         # Count genre-agnostic completed stages
         agnostic_completed = [s for s in self.GENRE_AGNOSTIC_STAGES if self.is_stage_completed(s)]
@@ -407,14 +446,17 @@ class CheckpointManager:
         }
     
     def get_all_genre_stats(self, target_genres: List[str]) -> Dict:
-        """
-        Get completion statistics for all target genres.
-        
+        """Get completion statistics for all target genres.
+
         Args:
-            target_genres: List of genres to check
-            
+            target_genres: List of genre names to check.
+
         Returns:
-            Dictionary mapping genre to completion stats
+            Dict: Dictionary mapping genre name to completion stats containing:
+                - completed_stages: Number of completed stages for this genre
+                - total_stages: Total number of genre-dependent stages
+                - completed_list: List of completed stage names
+                - is_complete: True if all genre-dependent stages are complete
         """
         stats = {}
         for genre in target_genres:
@@ -431,14 +473,13 @@ class CheckpointManager:
 
 
 def load_shots_from_metadata(metadata_path: Path) -> List[Dict]:
-    """
-    Load shots from saved metadata file.
-    
+    """Load shots from saved metadata file.
+
     Args:
-        metadata_path: Path to shot_metadata.json
-        
+        metadata_path: Path to the shot_metadata.json file.
+
     Returns:
-        List of shot dictionaries
+        List[Dict]: List of shot dictionaries, or empty list if loading fails.
     """
     if not metadata_path.exists():
         logger.error(f"Metadata file not found: {metadata_path}")
@@ -456,13 +497,12 @@ def load_shots_from_metadata(metadata_path: Path) -> List[Dict]:
 
 
 def save_shots_to_metadata(shots: List[Dict], metadata_path: Path, video_path: str):
-    """
-    Save shots to metadata file.
-    
+    """Save shots to metadata file.
+
     Args:
-        shots: List of shot dictionaries
-        metadata_path: Path to shot_metadata.json
-        video_path: Source video path
+        shots: List of shot dictionaries to save.
+        metadata_path: Path to the shot_metadata.json file.
+        video_path: Source video path to record in metadata.
     """
     metadata = {
         'source_video': video_path,

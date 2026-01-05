@@ -17,14 +17,13 @@ class MusicSelector:
     
     def __init__(self, azure_client, genre_profile: Dict, music_library_path: str,
                  enable_ai: bool = True):
-        """
-        Initialize music selector.
-        
+        """Initialize music selector.
+
         Args:
-            azure_client: Azure OpenAI client (can be None if enable_ai=False)
-            genre_profile: Genre-specific configuration
-            music_library_path: Path to music library directory
-            enable_ai: Whether to use AI for music selection
+            azure_client: Azure OpenAI client (can be None if enable_ai=False).
+            genre_profile: Genre-specific configuration.
+            music_library_path: Path to music library directory.
+            enable_ai: Whether to use AI for music selection.
         """
         self.azure_client = azure_client
         self.genre_profile = genre_profile
@@ -33,15 +32,14 @@ class MusicSelector:
         self.genre_tags = genre_profile.get('music_tags', [])
     
     def select_music(self, timeline: Dict, music_file: Optional[str] = None) -> Dict:
-        """
-        Select music track for trailer.
-        
+        """Select music track for trailer.
+
         Args:
-            timeline: Timeline dictionary
-            music_file: Optional specific music file to use
-            
+            timeline: Timeline dictionary.
+            music_file: Optional specific music file to use.
+
         Returns:
-            Dictionary with music file path and structure
+            Dict: Dictionary with music file path and structure.
         """
         if music_file:
             # User specified music file
@@ -74,11 +72,10 @@ class MusicSelector:
             return self._select_with_rules(timeline, available_tracks)
     
     def _scan_music_library(self) -> List[Dict]:
-        """
-        Scan music library directory for available tracks.
-        
+        """Scan music library directory for available tracks.
+
         Returns:
-            List of track dictionaries with metadata
+            List[Dict]: List of track dictionaries with metadata.
         """
         if not self.music_library.exists():
             logger.warning(f"Music library not found: {self.music_library}")
@@ -106,15 +103,17 @@ class MusicSelector:
         return tracks
     
     def _select_with_ai(self, timeline: Dict, available_tracks: List[Dict]) -> Dict:
-        """
-        Use AI to analyze timeline and select optimal music.
-        
+        """Use AI to analyze timeline and select optimal music.
+
         Args:
-            timeline: Timeline dictionary
-            available_tracks: Available music tracks
-            
+            timeline: Timeline dictionary.
+            available_tracks: Available music tracks.
+
         Returns:
-            Music selection dictionary
+            Dict: Music selection dictionary.
+
+        Raises:
+            json.JSONDecodeError: If AI response cannot be parsed as JSON.
         """
         # Build prompt
         prompt = f"""Analyze this trailer timeline and recommend music structure:
@@ -195,15 +194,14 @@ Return ONLY valid JSON:
             raise
     
     def _select_with_rules(self, timeline: Dict, available_tracks: List[Dict]) -> Dict:
-        """
-        Select music using rule-based logic.
-        
+        """Select music using rule-based logic.
+
         Args:
-            timeline: Timeline dictionary
-            available_tracks: Available music tracks
-            
+            timeline: Timeline dictionary.
+            available_tracks: Available music tracks.
+
         Returns:
-            Music selection dictionary
+            Dict: Music selection dictionary.
         """
         # Sort tracks by tag match score
         sorted_tracks = sorted(available_tracks, key=lambda t: t['tag_score'], reverse=True)
@@ -228,15 +226,14 @@ Return ONLY valid JSON:
         }
     
     def _match_track(self, recommendation: str, available_tracks: List[Dict]) -> Optional[Dict]:
-        """
-        Match AI recommendation to available track.
-        
+        """Match AI recommendation to available track.
+
         Args:
-            recommendation: Track name or tags from AI
-            available_tracks: Available tracks
-            
+            recommendation: Track name or tags from AI.
+            available_tracks: Available tracks.
+
         Returns:
-            Matching track or None
+            Optional[Dict]: Matching track or None if no match found.
         """
         recommendation_lower = recommendation.lower()
         
@@ -261,14 +258,13 @@ Return ONLY valid JSON:
         return best_match if best_score > 0 else None
     
     def _generate_simple_structure(self, timeline: Dict) -> Dict:
-        """
-        Generate simple 4-section music structure.
-        
+        """Generate simple 4-section music structure.
+
         Args:
-            timeline: Timeline dictionary
-            
+            timeline: Timeline dictionary.
+
         Returns:
-            Structure dictionary
+            Dict: Structure dictionary with intro, build, climax, and outro sections.
         """
         duration = timeline.get('total_duration', 90)
         
@@ -296,14 +292,13 @@ Return ONLY valid JSON:
         }
     
     def _format_track_list(self, tracks: List[Dict]) -> str:
-        """
-        Format track list for AI prompt.
-        
+        """Format track list for AI prompt.
+
         Args:
-            tracks: List of track dictionaries
-            
+            tracks: List of track dictionaries.
+
         Returns:
-            Formatted string
+            str: Formatted string with numbered tracks and their tags.
         """
         lines = []
         for i, track in enumerate(tracks, 1):

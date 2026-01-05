@@ -16,6 +16,16 @@ from pipeline_common import (
 from trailer_generator.narrative import AzureOpenAIClient, TimelineGenerator
 
 def main():
+    """Generate narrative timeline for a trailer using Azure OpenAI GPT-4.
+
+    Loads selected shots from the previous pipeline stage, initializes the
+    Azure OpenAI client and timeline generator, and produces a coherent
+    trailer narrative structure. The generated timeline is exported to JSON.
+
+    Raises:
+        SystemExit: If prerequisite stages are not completed, selected shots
+            file is missing, or the user interrupts execution.
+    """
     parser = argparse.ArgumentParser(
         description='Stage 7: Narrative Generation - Create trailer timeline with GPT-4'
     )
