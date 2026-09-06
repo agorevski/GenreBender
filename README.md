@@ -1,6 +1,6 @@
 # GenreBender
 
-A sophisticated, AI-powered system for automatically generating cinematic trailers from full-length movies in **multiple genres simultaneously**!
+An AI-assisted command-line tool for creating genre-reimagined trailer drafts from full-length movies in **multiple genres simultaneously**.
 
 Built with modular architecture supporting **27 genres** and parallel processing pipelines.
 
@@ -14,6 +14,13 @@ GenreBender transforms full-length movies into compelling trailers by:
 5. Mixing audio with music and effects
 
 The system processes movies through a multi-phase pipeline that can generate **multiple genre versions in parallel**.
+
+GenreBender is a local Python pipeline, not a hosted editor. You supply a movie,
+matching SRT subtitles, a synopsis, and access to the configured AI services.
+Generated trailers should be reviewed for pacing, dialogue, spoilers, and
+appropriate use of the source material before publication. Only process media
+you have permission to use; the configured analysis and Azure OpenAI services
+receive movie-derived frames, audio features, subtitles, or story text.
 
 ## 🏗️ Pipeline Architecture
 
@@ -132,8 +139,17 @@ movies:
 ### 4. Run Multi-Genre Pipeline
 
 ```bash
+# Preview the plan and identify local setup issues before starting
+python run_multi_genre_pipeline.py hitch --dry-run
+
+# Generate the configured trailers
 python run_multi_genre_pipeline.py hitch
 ```
+
+The example movie files are not included; replace their paths with your own
+files. Relative input paths are resolved from the pipeline `config.yaml` file.
+Stage scripts, runtime settings, assets, and outputs are resolved from the
+repository root, even when you invoke the orchestrator from another directory.
 
 ## 📖 Usage
 
@@ -143,7 +159,7 @@ python run_multi_genre_pipeline.py hitch
 # Generate trailers for all genres defined in config.yaml
 python run_multi_genre_pipeline.py hitch
 
-# Specify parallel workers (default: 4)
+# Specify parallel workers (default: settings.parallel_workers, otherwise 4)
 python run_multi_genre_pipeline.py hitch --parallel-workers 4
 
 # Run sequentially with full output streaming (for debugging)
@@ -157,6 +173,26 @@ python run_multi_genre_pipeline.py hitch --genres comedy,thriller,horror
 
 # Force re-run all stages
 python run_multi_genre_pipeline.py hitch --force
+
+# Preview a different pipeline configuration without processing or API calls
+python run_multi_genre_pipeline.py my_movie --config my_movies.yaml --dry-run
+```
+
+`--dry-run` prints the selected stages, exact commands, expected trailer paths,
+and local readiness issues without running media tools, making API calls, or
+writing outputs. Input/configuration errors exit with code **2**. A valid preview
+exits **0**, even if readiness warnings are present; it is not a connectivity
+test or a guarantee that generation will succeed.
+
+Generation stops before expensive work if FFmpeg, FFprobe, required Azure
+settings, or requested resume artifacts are missing. Shared preprocessing must
+succeed before any genre starts. Once genre processing begins, a failed genre
+does not cancel the others, including in sequential mode. The summary reports
+each result, verifies that successful final files exist and are non-empty, and
+exits **1** if any genre fails. Retry only failed genres using, for example:
+
+```bash
+python run_multi_genre_pipeline.py hitch --skip-phase1 --genres horror
 ```
 
 ### Stage-by-Stage Execution
@@ -189,11 +225,14 @@ python 10_audio_mixing.py --input movie.mp4 --genre thriller
 --movie-name NAME        Movie name for story graph lookup
 --force                  Force re-run even if completed
 --test                   Process only first 5 shots for testing
---parallel-workers N     Number of parallel genre workers (default: 4)
+--parallel-workers N     Positive worker count (configured value, otherwise 4)
 --skip-phase1           Skip genre-agnostic stages
 --sequential            Run Phase 2 sequentially with full output streaming
 --verbose               Enable verbose logging
 ```
+
+The orchestrator also accepts `--dry-run` and `--config PATH`. Stage-specific
+options such as `--input`, `--test`, and `--verbose` are not orchestrator flags.
 
 ## 📊 Output Structure
 
@@ -207,14 +246,14 @@ outputs/<sanitized_filename>/
 │   └── ...
 ├── cache/
 │   └── analysis_cache.json
-├── embeddings/
-│   ├── scene_embeddings.pkl
-│   └── beat_embeddings.pkl
-├── output/
-│   ├── selected_scenes.json
-│   └── trailer_timeline.json
 ├── trailers/
 │   ├── comedy/
+│   │   ├── embeddings/
+│   │   │   ├── scene_embeddings.pkl
+│   │   │   └── beat_embeddings.pkl
+│   │   ├── selected_scenes.json
+│   │   ├── trailer_timeline.json
+│   │   ├── temp/
 │   │   ├── trailer_comedy_assembled.mp4
 │   │   └── trailer_comedy_final.mp4      # FINAL
 │   ├── thriller/
@@ -259,6 +298,20 @@ Each genre defines:
 - **Music generation**: Instruments and mood descriptors per section
 - **Pacing**: Shot timing preferences
 - **Text overlay style**: Font, color, animation
+
+This file is the source of truth for the supported genre names across the
+orchestrator and stage CLIs. Names are case-insensitive; unknown names are
+rejected rather than silently using a thriller profile.
+
+Timeline construction keeps source ranges valid and avoids repeated shots.
+When the selected footage cannot fill the requested duration, the timeline
+records the actual duration, represented beats, and shortfall instead of
+inventing gaps. Video assembly uses the selected source offsets, supplies
+silence for clips without audio, and keeps transitions within available source
+handles; boundaries without enough footage remain cuts.
+
+Title overlay rendering is not yet implemented. AI title-text generation is
+disabled by default to avoid paying for text that is not shown in the export.
 
 ### Settings (`trailer_generator/config/settings.yaml`)
 
@@ -372,8 +425,8 @@ tail -n 50 outputs/<filename>/trailer_generator.log
 # Check Qwen server
 curl http://localhost:8000/health
 
-# Check embeddings
-ls -la outputs/<filename>/embeddings/
+# Check embeddings for one genre
+ls -la outputs/<filename>/trailers/comedy/embeddings/
 ```
 
 ## 📝 Checkpoint System
@@ -384,13 +437,29 @@ The checkpoint system tracks progress separately for:
 
 ```json
 {
-  "completed_stages": ["shot_detection", "keyframe_extraction", ...],
+  "version": "2.0",
+  "stages": {
+    "shot_detection": {"completed": true},
+    "keyframe_extraction": {"completed": true}
+  },
   "genre_stages": {
-    "comedy": ["beat_sheet_generation", "embedding_generation", ...],
-    "thriller": ["beat_sheet_generation", ...]
+    "comedy": {
+      "embedding_generation": {"completed": true},
+      "scene_retrieval": {"completed": true}
+    },
+    "thriller": {
+      "embedding_generation": {"completed": true}
+    }
   }
 }
 ```
+
+Workers update checkpoints under a shared file lock and replace the JSON
+atomically, so concurrent genres do not overwrite each other's progress.
+Keep the `checkpoint.json.lock` sidecar in place, especially while workers
+are running. A malformed checkpoint now stops execution instead of silently
+discarding progress: stop active workers, back up the file, then repair it or
+move it aside deliberately before restarting.
 
 ## 🎵 Audio Assets
 
@@ -403,6 +472,11 @@ horror_atmospheric.mp3
 
 See `audio_assets/README.md` for detailed setup.
 
+Audio finalization uses each genre's own timeline, assembled video, and temporary
+directory. When music is available, short tracks loop to the constructed trailer
+duration; dialogue remains audible when ducking lowers the music. Missing music
+continues to use the assembled video's original audio.
+
 ## 🤝 Contributing
 
 Key extension points:
@@ -410,6 +484,16 @@ Key extension points:
 2. **Analysis Backends**: Implement `RemoteAnalyzer` interface
 3. **LLM Providers**: Extend `AzureOpenAIClient`
 4. **Retrieval Algorithms**: Modify `scene_retriever.py`
+
+Run the focused product regressions without contacting AI services:
+
+```bash
+python -m pytest -q test_pipeline_orchestrator.py test_checkpoint.py test_genre_profiles.py test_audio_pipeline.py test_trailer_quality.py
+```
+
+Synthetic rendering cases run when FFmpeg and FFprobe are on PATH; otherwise
+those media cases are skipped. The remaining cases use local fixtures and mocks,
+including independent-process checkpoint updates.
 
 ## 📚 Additional Documentation
 
@@ -419,4 +503,4 @@ Key extension points:
 
 ---
 
-**Final Output**: The system generates broadcast-ready trailers for each genre at `outputs/<video>/trailers/<genre>/trailer_<genre>_final.mp4`
+**Final Output**: Reviewable trailer drafts for each genre are saved at `outputs/<video>/trailers/<genre>/trailer_<genre>_final.mp4`.

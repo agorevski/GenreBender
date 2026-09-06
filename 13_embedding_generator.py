@@ -18,14 +18,14 @@ import sys
 from pathlib import Path
 
 from pipeline_common import (
+    ALL_GENRES,
+    normalize_genre,
     initialize_genre_stage,
     load_config,
     print_completion_message,
     sanitize_filename,
     get_story_graph_dir
 )
-from trailer_generator.narrative.azure_client import AzureOpenAIClient
-from trailer_generator.embeddings.embedding_generator import generate_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -45,9 +45,8 @@ def parse_args():
     """
     parser = argparse.ArgumentParser(description="Stage 13: Generate embeddings for semantic scene retrieval")
     parser.add_argument('--input', type=str, required=True, help='Input video file path')
-    parser.add_argument('--genre', type=str, required=True, 
-                       choices=['comedy', 'horror', 'thriller', 'parody', 'mockumentary', 
-                                'crime', 'drama', 'experimental', 'fantasy', 'romance', 'scifi', 'action'], 
+    parser.add_argument('--genre', type=normalize_genre, required=True,
+                       choices=ALL_GENRES,
                        help='Target trailer genre')
     parser.add_argument('--movie-name', type=str, help='Movie name (for story graph lookup, defaults to input filename)')
     parser.add_argument('--force', action='store_true', help='Force regeneration even if embeddings exist')
@@ -126,6 +125,9 @@ def main():
         int: Exit code (0 for success, 1 for failure).
     """
     args = parse_args()
+
+    from trailer_generator.narrative.azure_client import AzureOpenAIClient
+    from trailer_generator.embeddings.embedding_generator import generate_embeddings
     
     # Initialize stage with checkpoint (genre-dependent stage)
     output_base, dirs, checkpoint, logger = initialize_genre_stage(

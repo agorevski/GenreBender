@@ -19,11 +19,31 @@ from trailer_generator.checkpoint import CheckpointManager, load_shots_from_meta
 # Load environment variables
 load_dotenv()
 
-# All supported genres
-ALL_GENRES = [
-    'comedy', 'horror', 'thriller', 'parody', 'mockumentary',
-    'crime', 'drama', 'experimental', 'fantasy', 'romance', 'scifi', 'action'
-]
+GENRE_PROFILES_PATH = Path(__file__).parent / 'trailer_generator' / 'config' / 'genre_profiles.yaml'
+
+
+def _load_genre_profiles(profile_path: Path) -> Dict:
+    """Load the genre registry, rejecting malformed profiles explicitly."""
+    with open(profile_path, 'r', encoding='utf-8') as f:
+        profiles = yaml.safe_load(f)
+    if not isinstance(profiles, dict) or not profiles:
+        raise ValueError(f"Genre profiles must be a non-empty mapping: {profile_path}")
+    for name, profile in profiles.items():
+        if (not isinstance(name, str) or not name or name != name.strip().lower()
+                or not isinstance(profile, dict) or not profile):
+            raise ValueError(f"Invalid genre profile {name!r} in {profile_path}")
+    return profiles
+
+
+ALL_GENRES = list(_load_genre_profiles(GENRE_PROFILES_PATH))
+
+
+def normalize_genre(genre: str) -> str:
+    """Normalize a supported genre name for CLI arguments and output paths."""
+    normalized = genre.strip().lower()
+    if normalized not in ALL_GENRES:
+        raise ValueError(f"Unknown genre {genre!r}. Choose from: {', '.join(ALL_GENRES)}")
+    return normalized
 
 def sanitize_filename(filename: str) -> str:
     """
@@ -163,12 +183,12 @@ def get_movie_config(movie_key: str, config_path: str = 'config.yaml') -> Dict:
         raise ValueError(f"Movie key '{movie_key}' not found in {config_path}")
     return movies[movie_key]
 
-def load_genre_profile(genre: str, 
-                      profile_path: str = 'trailer_generator/config/genre_profiles.yaml') -> Dict:
+def load_genre_profile(genre: str,
+                      profile_path: str = str(GENRE_PROFILES_PATH)) -> Dict:
     """Load genre-specific configuration from profiles file.
 
-    Loads the genre profile from the YAML profiles file. Falls back to
-    'thriller' profile if the specified genre is not found.
+    Loads the requested genre from the YAML profiles file. Unknown genres
+    raise ValueError rather than silently producing a different genre.
 
     Args:
         genre: Target genre name (case-insensitive).
@@ -177,12 +197,12 @@ def load_genre_profile(genre: str,
     Returns:
         Genre profile dictionary with 'name' key added for reference.
     """
-    with open(profile_path, 'r') as f:
-        profiles = yaml.safe_load(f)
-    
-    profile = profiles.get(genre.lower(), profiles.get('thriller'))
-    # Add genre name to profile for easy reference
-    profile['name'] = genre.lower()
+    profiles = _load_genre_profiles(Path(profile_path))
+    genre = genre.strip().lower()
+    if genre not in profiles:
+        raise ValueError(f"Unknown genre {genre!r}. Choose from: {', '.join(profiles)}")
+    profile = profiles[genre]
+    profile['name'] = genre
     return profile
 
 def setup_directories(output_base: Path, genre: Optional[str] = None) -> Dict[str, Path]:
@@ -404,7 +424,7 @@ def add_genre_arguments(parser: argparse.ArgumentParser):
         parser: ArgumentParser instance
     """
     add_common_arguments(parser)
-    parser.add_argument('--genre', type=str, required=True,
+    parser.add_argument('--genre', type=normalize_genre, required=True,
                        choices=ALL_GENRES,
                        help='Target trailer genre (required)')
 
@@ -417,7 +437,7 @@ def add_common_arguments_with_optional_genre(parser: argparse.ArgumentParser):
         parser: ArgumentParser instance
     """
     add_common_arguments(parser)
-    parser.add_argument('--genre', type=str, default=None,
+    parser.add_argument('--genre', type=normalize_genre, default=None,
                        choices=ALL_GENRES,
                        help='Trailer genre/style (optional for this stage)')
 
@@ -432,7 +452,7 @@ def add_common_arguments_legacy(parser: argparse.ArgumentParser):
     """
     parser.add_argument('--input', type=str, required=True, 
                        help='Path to input video file')
-    parser.add_argument('--genre', type=str, default='thriller',
+    parser.add_argument('--genre', type=normalize_genre, default='thriller',
                        choices=ALL_GENRES,
                        help='Trailer genre/style')
     parser.add_argument('--config', type=str, 

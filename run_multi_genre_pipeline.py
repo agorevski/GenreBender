@@ -1,133 +1,142 @@
 #!/usr/bin/env python3
-"""
-Multi-Genre Pipeline Orchestrator
-==================================
+"""Run or preview the shared preprocessing and per-genre trailer pipeline.
 
-Runs the complete semantic pipeline for generating trailers in multiple genres.
-
-Phase 1 (Sequential, Genre-Agnostic):
-  - Stage 1: Shot Detection
-  - Stage 2: Keyframe Extraction
-  - Stage 3: Audio Extraction
-  - Stage 4: Subtitle Management
-  - Stage 5: Remote Analysis (Qwen2-VL)
-  - Stage 11: Story Graph Generation
-
-Phase 2 (Parallel, Per-Genre):
-  For each genre in config.yaml:
-  - Stage 12: Beat Sheet Generation
-  - Stage 13: Embedding Generation
-  - Stage 14: Scene Retrieval
-  - Stage 15: Timeline Construction
-  - Stage 9: Video Assembly
-  - Stage 10: Audio Mixing
-
-Usage:
-    python run_multi_genre_pipeline.py <config_key>
-    python run_multi_genre_pipeline.py hitch --parallel-workers 4
-    python run_multi_genre_pipeline.py hitch --sequential  # Full output streaming
-    python run_multi_genre_pipeline.py hitch --skip-phase1
+Input paths are relative to the pipeline configuration file. Stage scripts,
+runtime settings, assets and generated outputs are rooted at this repository.
+Use --dry-run to preview the plan without media processing or network calls.
 """
 
 import argparse
-import logging
-import subprocess
-import sys
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+import json
 import os
 from pathlib import Path
-from datetime import datetime
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import List, Dict, Optional, Tuple
-import traceback
+import shutil
+import subprocess
+import sys
+from threading import Thread
+from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 import yaml
 
-from pipeline_common import (
-    load_pipeline_config,
-    get_movie_config,
-    get_output_base_dir,
-    get_story_graph_dir,
-    sanitize_filename,
-    setup_logging,
-    ALL_GENRES
+from pipeline_common import ALL_GENRES, get_output_base_dir, get_story_graph_dir
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+SETTINGS_PATH = PROJECT_ROOT / 'trailer_generator' / 'config' / 'settings.yaml'
+DIAGNOSTIC_LIMIT = 8192
+PHASE1_CHECKPOINT_STAGES = (
+    'shot_detection', 'keyframe_extraction', 'audio_extraction',
+    'subtitle_management', 'remote_analysis',
 )
-from trailer_generator.checkpoint import CheckpointManager
+
+
+def _phase1_plan(video_path, movie_name, synopsis_path, srt_path, force=False):
+    common = ['--input', video_path]
+    stages = [
+        ('1_shot_detection.py', common.copy()),
+        ('2_keyframe_extraction.py', common.copy()),
+        ('3_audio_extraction.py', common.copy()),
+        ('4_subtitle_management.py', common + ['--srt-file', srt_path]),
+        ('5_remote_analysis.py', common.copy()),
+        ('11_story_graph_generator.py', [
+            '--movie-name', movie_name, '--synopsis', synopsis_path,
+            '--srt-file', srt_path,
+        ]),
+    ]
+    return [(script, args + (['--force'] if force else [])) for script, args in stages]
+
+
+def _genre_plan(genre, video_path, movie_name, force=False):
+    stages = [
+        ('12_beat_sheet_generator.py', ['--movie-name', movie_name, '--genre', genre]),
+        ('13_embedding_generator.py', [
+            '--input', video_path, '--genre', genre, '--movie-name', movie_name,
+        ]),
+        ('14_scene_retrieval.py', [
+            '--input', video_path, '--genre', genre, '--movie-name', movie_name,
+        ]),
+        ('15_timeline_constructor.py', ['--input', video_path, '--genre', genre]),
+        ('9_video_assembly.py', ['--input', video_path, '--genre', genre]),
+        ('10_audio_mixing.py', ['--input', video_path, '--genre', genre]),
+    ]
+    return [(script, args + (['--force'] if force else [])) for script, args in stages]
+
+
+def _output_base(video_path):
+    return PROJECT_ROOT / get_output_base_dir(video_path)
+
+
+def _trailer_path(video_path, genre):
+    return _output_base(video_path) / 'trailers' / genre / f'trailer_{genre}_final.mp4'
 
 
 def run_stage_script(
-    script_name: str, 
-    args: List[str], 
+    script_name: str,
+    args: List[str],
     log_prefix: str = "",
-    stream_output: bool = True
+    stream_output: bool = True,
+    *,
+    timeout_seconds: float = 7200,
 ) -> Tuple[bool, str]:
-    """Run a pipeline stage script as a subprocess.
-    
-    Executes a Python script with the given arguments, optionally streaming
-    output to the console in real-time or capturing it for later processing.
-    
-    Args:
-        script_name: Name of the Python script to run (e.g., '1_shot_detection.py').
-        args: Command-line arguments to pass to the script.
-        log_prefix: Prefix string to prepend to log messages for identification.
-        stream_output: If True, stream stdout/stderr to console in real-time.
-            If False, capture output silently (useful for parallel execution).
-        
-    Returns:
-        A tuple containing:
-            - bool: True if the script completed successfully (exit code 0).
-            - str: Status message describing the result or error details.
-    
-    Raises:
-        No exceptions are raised; errors are captured and returned in the tuple.
-    """
-    cmd = [sys.executable, script_name] + args
-    
+    """Run a stage with a bounded combined-output tail and a timeout in both modes."""
+    script_path = PROJECT_ROOT / script_name
+    command = [sys.executable, str(script_path), *args]
+    output_tail = deque(maxlen=20)
+    read_errors = []
+    label = f"{log_prefix}{script_path.name}"
+
     try:
-        if stream_output:
-            # Stream output to console in real-time
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1,  # Line buffered
-                env={**os.environ, 'PYTHONUNBUFFERED': '1'}  # Force unbuffered Python output
-            )
-            
-            # Stream output line by line
-            output_lines = []
-            for line in process.stdout:
-                prefixed_line = f"{log_prefix}{line}" if log_prefix else line
-                print(prefixed_line, end='', flush=True)
-                output_lines.append(line)
-            
-            process.wait()
-            
-            if process.returncode == 0:
-                return True, f"{log_prefix}✓ {script_name} completed successfully"
-            else:
-                # Get last few lines for error context
-                error_context = ''.join(output_lines[-20:]) if output_lines else "No output"
-                return False, f"{log_prefix}✗ {script_name} failed (exit code {process.returncode})"
-        else:
-            # Capture output (for parallel execution to avoid interleaving)
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=7200  # 2 hour timeout per stage
-            )
-            
-            if result.returncode == 0:
-                return True, f"{log_prefix}✓ {script_name} completed successfully"
-            else:
-                error_msg = result.stderr[-1000:] if result.stderr else "No error output"
-                return False, f"{log_prefix}✗ {script_name} failed: {error_msg}"
-            
+        process = subprocess.Popen(
+            command, cwd=str(PROJECT_ROOT), stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, encoding='utf-8',
+            errors='replace', bufsize=1,
+            env={**os.environ, 'PYTHONUNBUFFERED': '1', 'PYTHONIOENCODING': 'utf-8'},
+        )
+    except OSError as exc:
+        return False, f"{label}: could not start ({exc})"
+
+    def read_output():
+        try:
+            # Limit individual reads too: media tools may emit enormous lines.
+            for chunk in iter(lambda: process.stdout.readline(4096), ''):
+                output_tail.append(chunk)
+                if stream_output:
+                    print(f"{log_prefix}{chunk}", end='', flush=True)
+        except (OSError, UnicodeError) as exc:
+            read_errors.append(exc)
+
+    reader = Thread(target=read_output, daemon=True)
+    reader.start()
+    timed_out = False
+    try:
+        process.wait(timeout=timeout_seconds)
     except subprocess.TimeoutExpired:
-        return False, f"{log_prefix}✗ {script_name} timed out after 2 hours"
-    except Exception as e:
-        return False, f"{log_prefix}✗ {script_name} error: {str(e)}"
+        timed_out = True
+        process.kill()
+        process.wait()
+    except KeyboardInterrupt:
+        process.kill()
+        process.wait()
+        raise
+    finally:
+        reader.join(timeout=5)
+        if not reader.is_alive():
+            process.stdout.close()
+
+    context = ''.join(list(output_tail))[-DIAGNOSTIC_LIMIT:].strip() or 'No output captured.'
+    if timed_out:
+        return False, f"{label}: timed out after {timeout_seconds:g} seconds\n{context}"
+    if read_errors:
+        return False, f"{label}: could not read output ({read_errors[0]})\n{context}"
+    if reader.is_alive():
+        return False, f"{label}: output pipe did not close after process exit\n{context}"
+    if process.returncode != 0:
+        return False, f"{label}: failed (exit code {process.returncode})\n{context}"
+    return True, f"{label}: completed successfully"
 
 
 def run_genre_pipeline(
@@ -135,48 +144,32 @@ def run_genre_pipeline(
     video_path: str,
     movie_name: str,
     config_path: str = 'trailer_generator/config/settings.yaml',
-    stream_output: bool = True
+    stream_output: bool = True,
+    *,
+    force: bool = False,
 ) -> Tuple[str, bool, str]:
-    """Run all genre-dependent stages for a single genre.
-    
-    Executes the complete Phase 2 pipeline for a specific genre, including
-    beat sheet generation, embedding generation, scene retrieval, timeline
-    construction, video assembly, and audio mixing.
-    
-    Args:
-        genre: Target genre for trailer generation (e.g., 'thriller', 'comedy').
-        video_path: Path to the input video file.
-        movie_name: Movie name used for story graph lookup and output naming.
-        config_path: Path to the settings.yaml configuration file.
-        stream_output: If True, stream output to console in real-time.
-            If False, capture output silently for parallel execution.
-        
-    Returns:
-        A tuple containing:
-            - str: The genre that was processed.
-            - bool: True if all stages completed successfully.
-            - str: Status message describing the result or failure point.
+    """Run Phase 2 for one genre; config_path is retained for caller compatibility.
+
+    Semantic stages use repository settings and do not accept a --config flag.
     """
-    log_prefix = f"[{genre.upper()}] "
-    
-    stages = [
-        ('12_beat_sheet_generator.py', ['--movie-name', movie_name, '--genre', genre]),
-        ('13_embedding_generator.py', ['--input', video_path, '--genre', genre, '--movie-name', movie_name]),
-        ('14_scene_retrieval.py', ['--input', video_path, '--genre', genre, '--movie-name', movie_name]),
-        ('15_timeline_constructor.py', ['--input', video_path, '--genre', genre]),
-        ('9_video_assembly.py', ['--input', video_path, '--genre', genre]),
-        ('10_audio_mixing.py', ['--input', video_path, '--genre', genre]),
-    ]
-    
-    for script, args in stages:
-        print(f"{log_prefix}▶ Running {script}...")
-        success, message = run_stage_script(script, args, log_prefix, stream_output=stream_output)
-        print(message)
-        
+    prefix = f"[{genre.upper()}] "
+    for script, args in _genre_plan(genre, video_path, movie_name, force):
+        if stream_output:
+            print(f"{prefix}Running {script}...")
+        success, message = run_stage_script(
+            script, args, prefix, stream_output=stream_output,
+        )
+        if stream_output:
+            print(message)
         if not success:
-            return genre, False, f"Failed at {script}: {message}"
-    
-    return genre, True, f"{log_prefix}All stages completed successfully"
+            return genre, False, message
+
+    trailer_path = _trailer_path(video_path, genre)
+    try:
+        _require_file(trailer_path, 'Final trailer')
+    except ValueError as exc:
+        return genre, False, f"{prefix}Stages exited successfully, but {exc}"
+    return genre, True, f"{prefix}Trailer ready: {trailer_path}"
 
 
 def run_phase1_stages(
@@ -184,332 +177,323 @@ def run_phase1_stages(
     movie_name: str,
     synopsis_path: str,
     srt_path: str,
-    force: bool = False
+    force: bool = False,
 ) -> bool:
-    """Run Phase 1 (genre-agnostic) stages sequentially.
-    
-    Executes all genre-independent preprocessing stages including shot detection,
-    keyframe extraction, audio extraction, subtitle management, remote analysis,
-    and story graph generation.
-    
-    Args:
-        video_path: Path to the input video file.
-        movie_name: Name of the movie for identification and output naming.
-        synopsis_path: Path to the text file containing the movie synopsis.
-        srt_path: Path to the SRT subtitle file for the video.
-        force: If True, force re-run of stages even if previously completed.
-        
-    Returns:
-        True if all Phase 1 stages completed successfully, False otherwise.
-    """
-    print("\n" + "=" * 70)
-    print("PHASE 1: Genre-Agnostic Processing")
-    print("=" * 70)
-    
-    # Common args for stages 1-5
-    common_args = ['--input', video_path]
-    if force:
-        common_args.append('--force')
-    
-    # Stages 1-5 (genre-agnostic)
-    phase1_stages = [
-        ('1_shot_detection.py', common_args),
-        ('2_keyframe_extraction.py', common_args),
-        ('3_audio_extraction.py', common_args),
-        ('4_subtitle_management.py', common_args + ['--srt-file', srt_path]),
-        ('5_remote_analysis.py', common_args),
-    ]
-    
-    for script, args in phase1_stages:
-        print(f"\n▶ Running {script}...")
+    """Run shared stages sequentially, stopping when a prerequisite fails."""
+    print("\nPHASE 1: Shared preprocessing")
+    for script, args in _phase1_plan(video_path, movie_name, synopsis_path, srt_path, force):
+        print(f"\nRunning {script}...")
         success, message = run_stage_script(script, args)
         print(message)
-        
         if not success:
-            print(f"\n❌ Phase 1 failed at {script}")
             return False
-    
-    # Stage 11: Story Graph Generation
-    print(f"\n▶ Running 11_story_graph_generator.py...")
-    stage11_args = [
-        '--movie-name', movie_name,
-        '--synopsis', synopsis_path,
-        '--srt-file', srt_path
-    ]
-    if force:
-        stage11_args.append('--force')
-    
-    success, message = run_stage_script('11_story_graph_generator.py', stage11_args)
-    print(message)
-    
-    if not success:
-        print(f"\n❌ Phase 1 failed at story graph generation")
-        return False
-    
-    print("\n" + "=" * 70)
-    print("✓ PHASE 1 COMPLETE")
-    print("=" * 70)
-    
     return True
+
+
+def _record_result(results, errors, genre, success, message):
+    results[genre] = success
+    if not success and errors is not None:
+        errors[genre] = message
+    print(f"\n{'OK' if success else 'FAILED'} {genre.upper()}: {message}")
 
 
 def run_phase2_sequential(
     genres: List[str],
     video_path: str,
-    movie_name: str
+    movie_name: str,
+    *,
+    force: bool = False,
+    errors: Optional[Dict[str, str]] = None,
 ) -> Dict[str, bool]:
-    """Run Phase 2 (genre-dependent) stages sequentially with full output streaming.
-    
-    Processes each genre one at a time, streaming all output to the console.
-    This mode is useful for debugging as it provides full visibility into
-    each stage's execution. Processing stops immediately on any failure.
-    
-    Args:
-        genres: List of genre names to process (e.g., ['thriller', 'comedy']).
-        video_path: Path to the input video file.
-        movie_name: Name of the movie for story graph lookup and output naming.
-        
-    Returns:
-        A dictionary mapping each genre name to its success status (bool).
-        If a genre fails, subsequent genres may not be present in the dict.
-    """
-    print("\n" + "=" * 70)
-    print(f"PHASE 2: Sequential Genre Processing ({len(genres)} genres)")
-    print("=" * 70)
-    print(f"Genres: {', '.join(genres)}")
-    
-    results = {}
-    
-    for genre in genres:
-        print(f"\n{'=' * 70}")
-        print(f"Processing Genre: {genre.upper()}")
-        print(f"{'=' * 70}")
-        
-        result_genre, success, message = run_genre_pipeline(
-            genre, video_path, movie_name, stream_output=True
-        )
-        results[result_genre] = success
-        
-        if success:
-            print(f"\n✓ {result_genre.upper()}: Completed successfully")
-        else:
-            print(f"\n✗ {result_genre.upper()}: {message}")
-            print("\n❌ Stopping processing due to failure")
-            return results
-    
-    return results
+    """Process every genre, retaining failures without blocking unrelated genres."""
+    print(f"\nPHASE 2: Sequential processing ({len(genres)} genres)")
+    return _run_genres(
+        genres, video_path, movie_name, 1, True, force, errors,
+    )
+
 
 def run_phase2_parallel(
     genres: List[str],
     video_path: str,
     movie_name: str,
-    parallel_workers: int = 4
+    parallel_workers: int = 4,
+    *,
+    force: bool = False,
+    errors: Optional[Dict[str, str]] = None,
 ) -> Dict[str, bool]:
-    """Run Phase 2 (genre-dependent) stages in parallel.
-    
-    Processes multiple genres concurrently using a process pool. Output is
-    captured rather than streamed to avoid interleaving between workers.
-    Use --sequential mode for full output visibility during debugging.
-    
-    Args:
-        genres: List of genre names to process (e.g., ['thriller', 'comedy']).
-        video_path: Path to the input video file.
-        movie_name: Name of the movie for story graph lookup and output naming.
-        parallel_workers: Maximum number of concurrent worker processes.
-        
-    Returns:
-        A dictionary mapping each genre name to its success status (bool).
-        If any genre fails, remaining jobs are cancelled and may not appear.
-    """
-    print("\n" + "=" * 70)
-    print(f"PHASE 2: Parallel Genre Processing ({len(genres)} genres, {parallel_workers} workers)")
-    print("=" * 70)
-    print(f"Genres: {', '.join(genres)}")
-    print("Note: Use --sequential for full output streaming")
-    
+    """Run isolated stage subprocesses concurrently and collect every outcome."""
+    _validate_workers(parallel_workers)
+    print(f"\nPHASE 2: Parallel processing ({len(genres)} genres, {parallel_workers} workers)")
+    return _run_genres(
+        genres, video_path, movie_name, parallel_workers, False, force, errors,
+    )
+
+
+def _run_genres(genres, video_path, movie_name, workers, stream_output, force, errors):
     results = {}
-    
-    with ProcessPoolExecutor(max_workers=parallel_workers) as executor:
-        # Submit all genre jobs with stream_output=False for parallel execution
+    # Work is already isolated in subprocesses; threads avoid another process layer.
+    with ThreadPoolExecutor(max_workers=workers) as executor:
         futures = {
             executor.submit(
                 run_genre_pipeline, genre, video_path, movie_name,
-                'trailer_generator/config/settings.yaml', False  # stream_output=False
+                stream_output=stream_output, force=force,
             ): genre
             for genre in genres
         }
-        
-        # Process results as they complete
         for future in as_completed(futures):
             genre = futures[future]
-            try:
-                result_genre, success, message = future.result()
-                results[result_genre] = success
-                
-                if success:
-                    print(f"\n✓ {result_genre.upper()}: Completed successfully")
-                else:
-                    print(f"\n✗ {result_genre.upper()}: {message}")
-                    # Stop all processing on failure
-                    print("\n❌ Stopping all processing due to failure")
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    return results
-                    
-            except Exception as e:
-                results[genre] = False
-                print(f"\n✗ {genre.upper()}: Exception - {str(e)}")
-                traceback.print_exc()
-                # Stop all processing on exception
-                print("\n❌ Stopping all processing due to exception")
-                executor.shutdown(wait=False, cancel_futures=True)
-                return results
-    
-    return results
+            error = future.exception()
+            if error is not None:
+                success = False
+                message = f"Worker {type(error).__name__}: {str(error)[-DIAGNOSTIC_LIMIT:]}"
+            else:
+                _, success, message = future.result()
+            _record_result(results, errors, genre, success, message)
+    return {genre: results[genre] for genre in genres}
 
 
-def main() -> None:
-    """Main entry point for the multi-genre trailer pipeline orchestrator.
-    
-    Parses command-line arguments and orchestrates the complete trailer
-    generation pipeline. Phase 1 runs genre-agnostic preprocessing stages,
-    and Phase 2 generates trailers for each specified genre either
-    sequentially or in parallel.
-    
-    The function handles configuration loading, input validation, and
-    provides a summary of results upon completion.
-    
-    Returns:
-        None. Exits with code 0 on success, 1 on failure.
-    """
-    parser = argparse.ArgumentParser(
-        description='Multi-Genre Trailer Pipeline Orchestrator',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python run_multi_genre_pipeline.py hitch
-  python run_multi_genre_pipeline.py hitch --parallel-workers 4
-  python run_multi_genre_pipeline.py hitch --sequential  # Full output for debugging
-  python run_multi_genre_pipeline.py hitch --skip-phase1
-  python run_multi_genre_pipeline.py hitch --genres comedy,thriller,horror
-        """
-    )
-    
-    parser.add_argument('config_key', type=str,
-                       help='Movie configuration key from config.yaml')
-    parser.add_argument('--parallel-workers', type=int, default=4,
-                       help='Number of parallel workers for genre processing (default: 4)')
-    parser.add_argument('--sequential', action='store_true',
-                       help='Run Phase 2 genres sequentially with full output streaming (useful for debugging)')
-    parser.add_argument('--skip-phase1', action='store_true',
-                       help='Skip Phase 1 (genre-agnostic stages)')
-    parser.add_argument('--force', action='store_true',
-                       help='Force re-run all stages')
-    parser.add_argument('--genres', type=str, default=None,
-                       help='Comma-separated list of genres to override config.yaml')
-    parser.add_argument('--config', type=str, default='config.yaml',
-                       help='Path to pipeline config file (default: config.yaml)')
-    
-    args = parser.parse_args()
-    
-    # Load configuration
+def _read_mapping(path, label):
     try:
-        movie_config = get_movie_config(args.config_key, args.config)
-    except ValueError as e:
-        print(f"❌ Error: {e}")
-        print(f"\nAvailable movie keys:")
-        config = load_pipeline_config(args.config)
-        for key in config.get('movies', {}).keys():
-            print(f"  - {key}")
-        sys.exit(1)
-    
-    # Extract configuration
-    video_path = movie_config['video']
-    movie_name = movie_config['movie_name']
-    synopsis_path = movie_config['synopsis']
-    srt_path = movie_config['subtitles']
-    
-    # Determine genres
-    if args.genres:
-        genres = [g.strip().lower() for g in args.genres.split(',')]
-        # Validate genres
-        invalid = [g for g in genres if g not in ALL_GENRES]
-        if invalid:
-            print(f"❌ Invalid genres: {invalid}")
-            print(f"Valid genres: {ALL_GENRES}")
-            sys.exit(1)
+        with path.open(encoding='utf-8-sig') as stream:
+            value = yaml.safe_load(stream)
+    except (OSError, UnicodeError) as exc:
+        raise ValueError(f"Cannot read {label} {path}: {exc}") from exc
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, 'problem_mark', None)
+        location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ''
+        raise ValueError(f"Invalid YAML in {label} {path}{location}") from exc
+    if not isinstance(value, dict) or not value:
+        raise ValueError(f"{label} must be a non-empty YAML mapping: {path}")
+    return value
+
+
+def _require_file(path, label):
+    if not path.is_file():
+        raise ValueError(f"{label} file not found or not a regular file: {path}")
+    try:
+        with path.open('rb') as stream:
+            if not stream.read(1):
+                raise ValueError(f"{label} file is empty: {path}")
+    except OSError as exc:
+        raise ValueError(f"Cannot read {label} file {path}: {exc}") from exc
+
+
+def _validate_workers(value):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise ValueError("parallel_workers must be a positive integer")
+    return value
+
+
+def _normalize_genres(values):
+    if not isinstance(values, list) or not values:
+        raise ValueError("Genres must be a non-empty list (or comma-separated --genres)")
+    genres = []
+    for value in values:
+        if not isinstance(value, str) or value.strip().lower() not in ALL_GENRES:
+            raise ValueError(f"Invalid genre {value!r}. Valid genres: {', '.join(ALL_GENRES)}")
+        genre = value.strip().lower()
+        if genre not in genres:
+            genres.append(genre)
+    return genres
+
+
+def _load_request(args):
+    config_path = Path(args.config).expanduser().resolve()
+    config = _read_mapping(config_path, 'Pipeline config')
+    movies = config.get('movies')
+    if not isinstance(movies, dict) or not movies:
+        raise ValueError("Pipeline config must contain a non-empty 'movies' mapping")
+    if args.config_key not in movies:
+        available = ', '.join(str(key) for key in movies)
+        raise ValueError(f"Unknown movie key {args.config_key!r}. Available movie keys: {available}")
+    movie = movies[args.config_key]
+    if not isinstance(movie, dict):
+        raise ValueError(f"Movie {args.config_key!r} must be a mapping")
+    movie = movie.copy()
+    for field in ('movie_name', 'video', 'synopsis', 'subtitles'):
+        if not isinstance(movie.get(field), str) or not movie[field].strip():
+            raise ValueError(f"Movie {args.config_key!r} requires a non-empty '{field}' string")
+    movie['movie_name'] = movie['movie_name'].strip()
+    for field in ('video', 'synopsis', 'subtitles'):
+        path = (config_path.parent / Path(movie[field]).expanduser()).resolve()
+        _require_file(path, field.capitalize())
+        movie[field] = str(path)
+    settings = config.get('settings', {})
+    if not isinstance(settings, dict):
+        raise ValueError("Pipeline 'settings' must be a mapping")
+    configured_workers = _validate_workers(settings.get('parallel_workers', 4))
+    workers = _validate_workers(
+        args.parallel_workers if args.parallel_workers is not None else configured_workers,
+    )
+    genres = _normalize_genres(
+        args.genres.split(',') if args.genres is not None else movie.get('genres', ['thriller']),
+    )
+    return movie, genres, workers
+
+
+def _resume_issues(video_path, movie_name):
+    issues = []
+    paths = [
+        (PROJECT_ROOT / get_story_graph_dir(movie_name) / 'story_graph.json', 'Story graph'),
+        (_output_base(video_path) / 'shots' / 'shot_metadata.json', 'Shot metadata'),
+        (_output_base(video_path) / 'checkpoint.json', 'Checkpoint'),
+    ]
+    for path, label in paths:
+        try:
+            _require_file(path, label)
+            with path.open(encoding='utf-8-sig') as stream:
+                data = json.load(stream)
+            if not isinstance(data, (dict, list)) or not data:
+                raise ValueError(f"{label} must contain non-empty JSON data: {path}")
+            if label == 'Checkpoint':
+                stages = data.get('stages', {}) if isinstance(data, dict) else {}
+                missing = [
+                    stage for stage in PHASE1_CHECKPOINT_STAGES
+                    if not isinstance(stages, dict)
+                    or not isinstance(stages.get(stage), dict)
+                    or stages[stage].get('completed') is not True
+                ]
+                if missing:
+                    issues.append(f"Checkpoint has incomplete shared stages: {', '.join(missing)}")
+        except (ValueError, OSError) as exc:
+            issues.append(f"--skip-phase1: {exc}. Run without --skip-phase1 to rebuild prerequisites.")
+    return issues
+
+
+def _readiness_issues(movie, skip_phase1):
+    """Check only local prerequisites; never initialize clients or execute tools."""
+    issues = []
+    for tool in ('ffmpeg', 'ffprobe'):
+        if shutil.which(tool) is None:
+            issues.append(f"{tool} is not on PATH; install FFmpeg before generating trailers.")
+    settings = _read_mapping(SETTINGS_PATH, 'Runtime settings')
+    azure = settings.get('azure_openai')
+    if not isinstance(azure, dict):
+        issues.append("Runtime settings require an 'azure_openai' mapping.")
     else:
-        genres = movie_config.get('genres', ['thriller'])
-        genres = [g.lower() for g in genres]
-    
-    # Validate input files
-    for path, name in [(video_path, 'Video'), (synopsis_path, 'Synopsis'), (srt_path, 'Subtitles')]:
-        if not Path(path).exists():
-            print(f"❌ {name} file not found: {path}")
-            sys.exit(1)
-    
-    # Print configuration
-    print("\n" + "=" * 70)
-    print("GenreBender: Multi-Genre Trailer Pipeline")
-    print("=" * 70)
-    print(f"Config Key: {args.config_key}")
-    print(f"Movie: {movie_name}")
-    print(f"Video: {video_path}")
+        azure = azure.copy()
+        for key, env_name in (('endpoint', 'AZURE_OPENAI_ENDPOINT'), ('api_key', 'AZURE_OPENAI_KEY')):
+            if os.getenv(env_name):
+                azure[key] = os.environ[env_name]
+        key = azure.get('api_key')
+        if isinstance(key, str) and key.startswith('${') and key.endswith('}'):
+            azure['api_key'] = os.getenv(key[2:-1])
+        for field in ('endpoint', 'api_key', 'deployment_name', 'api_version'):
+            value = azure.get(field)
+            if (not isinstance(value, str) or not value.strip()
+                    or value.strip().lower().startswith(('your', '${', 'changeme'))):
+                issues.append(f"Configure azure_openai.{field} in runtime settings"
+                              + (" or AZURE_OPENAI_KEY." if field == 'api_key'
+                                 else " or AZURE_OPENAI_ENDPOINT." if field == 'endpoint' else "."))
+        endpoint = azure.get('endpoint')
+        if isinstance(endpoint, str) and endpoint:
+            parsed = urlparse(endpoint)
+            if (parsed.scheme not in ('http', 'https') or not parsed.hostname
+                    or 'yourendpoint' in parsed.hostname.lower()):
+                issues.append("azure_openai.endpoint must be a configured HTTP(S) endpoint.")
+    if skip_phase1:
+        issues.extend(_resume_issues(movie['video'], movie['movie_name']))
+    return issues
+
+
+def _print_plan(movie, genres, workers, args):
+    print("\nGenreBender: Multi-Genre Trailer Pipeline")
+    print(f"Movie: {movie['movie_name']}")
+    print(f"Video: {movie['video']}")
     print(f"Genres: {', '.join(genres)}")
-    print(f"Sequential Mode: {args.sequential}")
-    print(f"Parallel Workers: {args.parallel_workers if not args.sequential else 'N/A (sequential)'}")
-    print(f"Skip Phase 1: {args.skip_phase1}")
-    print(f"Force Re-run: {args.force}")
-    
+    print(f"Mode: {'sequential' if args.sequential else 'parallel'}; workers: "
+          f"{1 if args.sequential else workers}")
+    print(f"Force re-run: {args.force}")
+    print(f"Stage working directory: {PROJECT_ROOT}")
+    print(f"Runtime settings: {SETTINGS_PATH}")
+    print(f"Output location: {_output_base(movie['video'])}")
+    if not args.dry_run:
+        return
+    print("\nDRY RUN: no stages, media tools, API calls or output writes.")
+    phase1 = [] if args.skip_phase1 else _phase1_plan(
+        movie['video'], movie['movie_name'], movie['synopsis'], movie['subtitles'], args.force,
+    )
+    print("\nPhase 1: " + ('SKIPPED (existing prerequisites required)' if args.skip_phase1
+                            else 'shared preprocessing'))
+    for script, command_args in phase1:
+        print("  " + subprocess.list2cmdline([sys.executable, str(PROJECT_ROOT / script), *command_args]))
+    for genre in genres:
+        print(f"\nPhase 2: {genre}")
+        for script, command_args in _genre_plan(genre, movie['video'], movie['movie_name'], args.force):
+            print("  " + subprocess.list2cmdline([sys.executable, str(PROJECT_ROOT / script), *command_args]))
+        print(f"  Expected trailer: {_trailer_path(movie['video'], genre)}")
+
+
+def main(*, argv=None) -> None:
+    """Validate, preview or execute the pipeline; exit nonzero for any failed genre."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('config_key', help='Movie key from the pipeline config')
+    parser.add_argument('--parallel-workers', type=int, default=None,
+                        help='Positive worker count (default: settings.parallel_workers, then 4)')
+    parser.add_argument('--sequential', action='store_true', help='Process genres one at a time with streamed logs')
+    parser.add_argument('--skip-phase1', action='store_true', help='Reuse existing shared preprocessing artifacts')
+    parser.add_argument('--force', action='store_true', help='Force re-run of every selected stage')
+    parser.add_argument('--genres', help='Comma-separated genres overriding the movie config')
+    parser.add_argument('--config', default=str(PROJECT_ROOT / 'config.yaml'),
+                        help='Pipeline YAML; input paths are relative to this file (default: repository config.yaml)')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Preview commands and outputs offline; report readiness warnings without generating')
+    args = parser.parse_args(argv)
+    try:
+        movie, genres, workers = _load_request(args)
+        plans = _genre_plan(genres[0], movie['video'], movie['movie_name'])
+        if not args.skip_phase1:
+            plans += _phase1_plan(
+                movie['video'], movie['movie_name'], movie['synopsis'], movie['subtitles'],
+            )
+        for script, _ in plans:
+            _require_file(PROJECT_ROOT / script, 'Stage script')
+        issues = _readiness_issues(movie, args.skip_phase1)
+    except (ValueError, OSError) as exc:
+        parser.error(str(exc))
+
+    _print_plan(movie, genres, workers, args)
+    if issues:
+        print("\nReadiness issues (resolve before generation; cloud connectivity was not tested):")
+        for issue in issues:
+            print(f"  - {issue}")
+    if args.dry_run:
+        print("\nPreview complete. " + ("Generation is NOT ready." if issues
+                                       else "Local checks passed; cloud connectivity was not tested."))
+        sys.exit(0)
+    if issues:
+        sys.exit(1)
+
     start_time = datetime.now()
-    
-    # Phase 1: Genre-Agnostic Stages
-    if not args.skip_phase1:
-        if not run_phase1_stages(video_path, movie_name, synopsis_path, srt_path, args.force):
-            print("\n❌ Pipeline failed in Phase 1")
-            sys.exit(1)
-    else:
-        print("\n⏭️  Skipping Phase 1 (--skip-phase1)")
-    
-    # Phase 2: Multi-Genre Processing
+    if not args.skip_phase1 and not run_phase1_stages(
+        movie['video'], movie['movie_name'], movie['synopsis'], movie['subtitles'], args.force,
+    ):
+        print("\nPIPELINE SUMMARY: shared preprocessing failed.")
+        for genre in genres:
+            print(f"  NOT RUN {genre}: Phase 1 prerequisite failed")
+        sys.exit(1)
+
+    errors = {}
     if args.sequential:
-        results = run_phase2_sequential(genres, video_path, movie_name)
+        results = run_phase2_sequential(
+            genres, movie['video'], movie['movie_name'], force=args.force, errors=errors,
+        )
     else:
-        results = run_phase2_parallel(genres, video_path, movie_name, args.parallel_workers)
-    
-    # Summary
-    duration = (datetime.now() - start_time).total_seconds()
-    
-    print("\n" + "=" * 70)
-    print("PIPELINE SUMMARY")
-    print("=" * 70)
-    print(f"Total Duration: {duration/60:.1f} minutes")
-    print(f"\nGenre Results:")
-    
-    success_count = 0
-    for genre, success in results.items():
-        status = "✓" if success else "✗"
-        print(f"  {status} {genre}")
-        if success:
-            success_count += 1
-    
-    print(f"\nCompleted: {success_count}/{len(genres)} genres")
-    
-    # Output locations
-    output_base = get_output_base_dir(video_path)
-    print(f"\nOutput Location: {output_base}")
-    print(f"Trailers Directory: {output_base / 'trailers'}")
-    
+        results = run_phase2_parallel(
+            genres, movie['video'], movie['movie_name'], workers, force=args.force, errors=errors,
+        )
+    print(f"\nPIPELINE SUMMARY ({(datetime.now() - start_time).total_seconds() / 60:.1f} minutes)")
     for genre in genres:
         if results.get(genre):
-            trailer_path = output_base / 'trailers' / genre / f'trailer_{genre}_final.mp4'
-            print(f"  - {genre}: {trailer_path}")
-    
-    if success_count < len(genres):
-        print("\n⚠️  Some genres failed. Check logs for details.")
-        sys.exit(1)
-    else:
-        print("\n🎬 All trailers generated successfully!")
-        sys.exit(0)
+            print(f"  OK {genre}: {_trailer_path(movie['video'], genre)}")
+        else:
+            print(f"  FAILED {genre}: {errors.get(genre, 'No successful result was returned')}")
+    completed = sum(bool(results.get(genre)) for genre in genres)
+    print(f"\nCompleted: {completed}/{len(genres)} genres")
+    if completed != len(genres):
+        failed = ','.join(genre for genre in genres if not results.get(genre))
+        print(f"After fixing errors, retry only failed genres with --skip-phase1 --genres {failed}")
+    sys.exit(0 if completed == len(genres) else 1)
 
 
 if __name__ == '__main__':

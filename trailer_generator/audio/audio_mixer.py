@@ -5,6 +5,7 @@ Handles music mixing, audio ducking, normalization, and final audio assembly.
 
 import json
 import logging
+import math
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -161,21 +162,25 @@ class AudioMixer:
             Path: Path to mixed audio file.
         """
         output_audio = self.temp_dir / 'mixed_ducked.wav'
+        duration = self._timeline_duration(timeline)
         
         # Build filter_complex for ducking
         # sidechaincompress lowers music volume when original audio is present
         if original_audio and original_audio.exists():
             filter_complex = (
+                "[1:a]asplit=2[sidechain][dialogue];"
                 f"[0:a]volume=0.3[music];"  # Lower music base volume
-                f"[music][1:a]sidechaincompress="
+                f"[music][sidechain]sidechaincompress="
                 f"threshold={self.ducking_threshold}dB:"
                 f"ratio={self.ducking_ratio}:"
                 f"attack=200:"
-                f"release=1000[mixed]"
+                f"release=1000[ducked];"
+                "[dialogue][ducked]amix=inputs=2:duration=first:normalize=0[mixed]"
             )
             
             cmd = [
                 'ffmpeg',
+                '-stream_loop', '-1',
                 '-i', music_file,
                 '-i', str(original_audio),
                 '-filter_complex', filter_complex,
@@ -183,6 +188,7 @@ class AudioMixer:
                 '-acodec', 'pcm_s16le',
                 '-ar', str(self.sample_rate),
                 '-ac', '2',
+                '-t', str(duration),
                 '-y',
                 str(output_audio)
             ]
@@ -190,12 +196,14 @@ class AudioMixer:
             # No original audio, just use music
             cmd = [
                 'ffmpeg',
+                '-stream_loop', '-1',
                 '-i', music_file,
                 '-vn',
                 '-acodec', 'pcm_s16le',
                 '-ar', str(self.sample_rate),
                 '-ac', '2',
                 '-af', 'volume=0.5',  # Lower volume
+                '-t', str(duration),
                 '-y',
                 str(output_audio)
             ]
@@ -221,19 +229,22 @@ class AudioMixer:
             Path: Path to mixed audio file.
         """
         output_audio = self.temp_dir / 'mixed_simple.wav'
+        duration = self._timeline_duration(timeline)
         
         if original_audio and original_audio.exists():
             # Mix both tracks
             cmd = [
                 'ffmpeg',
+                '-stream_loop', '-1',
                 '-i', music_file,
                 '-i', str(original_audio),
                 '-filter_complex',
-                '[0:a]volume=0.3[a1];[1:a]volume=0.7[a2];[a1][a2]amix=inputs=2:duration=first[mixed]',
+                '[0:a]volume=0.3[a1];[1:a]volume=0.7[a2];[a1][a2]amix=inputs=2:duration=longest:normalize=0[mixed]',
                 '-map', '[mixed]',
                 '-acodec', 'pcm_s16le',
                 '-ar', str(self.sample_rate),
                 '-ac', '2',
+                '-t', str(duration),
                 '-y',
                 str(output_audio)
             ]
@@ -241,12 +252,14 @@ class AudioMixer:
             # Music only
             cmd = [
                 'ffmpeg',
+                '-stream_loop', '-1',
                 '-i', music_file,
                 '-vn',
                 '-acodec', 'pcm_s16le',
                 '-ar', str(self.sample_rate),
                 '-ac', '2',
                 '-af', 'volume=0.5',
+                '-t', str(duration),
                 '-y',
                 str(output_audio)
             ]
@@ -259,6 +272,15 @@ class AudioMixer:
             logger.error(f"Audio mixing failed: {e.stderr}")
             raise
     
+    @staticmethod
+    def _timeline_duration(timeline: Dict) -> float:
+        """Use the constructed duration, not the requested trailer budget."""
+        duration = timeline.get('actual_duration', timeline.get('total_duration'))
+        if (isinstance(duration, bool) or not isinstance(duration, (int, float))
+                or not math.isfinite(duration) or duration <= 0):
+            raise ValueError("Audio mixing requires a positive, finite timeline duration")
+        return float(duration)
+
     def _normalize_audio(self, audio_path: Path) -> Path:
         """Normalize audio to target LUFS.
 
@@ -309,7 +331,8 @@ class AudioMixer:
             '-b:a', self.bitrate,
             '-map', '0:v:0',  # Video from first input
             '-map', '1:a:0',  # Audio from second input
-            '-shortest',  # End when shortest stream ends
+            '-af', 'apad',
+            '-shortest',  # Padded audio makes the video determine the endpoint.
             '-y',
             str(output_path)
         ]

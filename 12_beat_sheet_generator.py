@@ -31,13 +31,13 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from pipeline_common import (
+    ALL_GENRES,
+    normalize_genre,
     load_config,
     setup_logging,
     get_story_graph_dir,
     sanitize_filename
 )
-from trailer_generator.narrative.azure_client import AzureOpenAIClient
-from trailer_generator.narrative.beat_sheet_generator import BeatSheetGenerator
 
 def parse_arguments():
     """Parse command line arguments for beat sheet generation.
@@ -65,9 +65,7 @@ Examples:
   # Custom output directory
   python 12_beat_sheet_generator.py --movie-name "Movie" --genre action --output-dir custom/
 
-Available Genres:
-  comedy, horror, thriller, parody, mockumentary, crime, drama,
-  experimental, fantasy, romance, scifi, action
+Available genres are listed in the --genre option.
         """
     )
     
@@ -80,10 +78,9 @@ Available Genres:
     
     parser.add_argument(
         '--genre',
-        type=str,
+        type=normalize_genre,
         required=True,
-        choices=['comedy', 'horror', 'thriller', 'parody', 'mockumentary', 
-                 'crime', 'drama', 'experimental', 'fantasy', 'romance', 'scifi', 'action'],
+        choices=ALL_GENRES,
         help='Target genre for trailer'
     )
     
@@ -164,6 +161,9 @@ def main():
         Exception: For any other generation failures.
     """
     args = parse_arguments()
+
+    from trailer_generator.narrative.azure_client import AzureOpenAIClient
+    from trailer_generator.narrative.beat_sheet_generator import BeatSheetGenerator
     
     # Load configuration
     config = load_config()

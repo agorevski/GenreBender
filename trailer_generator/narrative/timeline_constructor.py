@@ -10,9 +10,9 @@ Takes beat-matched scenes and constructs a precise timeline with:
 
 import json
 import logging
+import math
 from pathlib import Path
 from typing import Dict, List, Optional
-import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,10 @@ class TimelineConstructor:
             target_duration: Target trailer length in seconds
             pacing_rules: Optional custom pacing rules
         """
+        if (isinstance(target_duration, bool)
+                or not isinstance(target_duration, (int, float))
+                or not math.isfinite(target_duration) or target_duration <= 0):
+            raise ValueError("Target duration must be a finite positive number")
         self.target_duration = target_duration
         
         # Default pacing rules by beat type
@@ -65,7 +69,19 @@ class TimelineConstructor:
         Returns:
             Timeline dictionary with shots, transitions, and metadata
         """
+        if not isinstance(beats, list) or not beats or not isinstance(selected_scenes, dict):
+            raise ValueError("Timeline requires beats and a selected_scenes mapping")
         logger.info(f"Constructing timeline for {len(beats)} beats...")
+        beat_ids = []
+        for beat in beats:
+            if (not isinstance(beat, dict)
+                    or isinstance(beat.get('id'), bool)
+                    or not isinstance(beat.get('id'), (str, int))
+                    or not str(beat['id']).strip()):
+                raise ValueError("Every beat must have a non-empty ID")
+            beat_ids.append(str(beat['id']))
+        if len(set(beat_ids)) != len(beat_ids):
+            raise ValueError("Beat IDs must be unique")
         
         # Step 1: Allocate time budget per beat
         beat_budgets = self._allocate_time_budget(beats)
@@ -78,7 +94,9 @@ class TimelineConstructor:
         for i, beat in enumerate(beats):
             beat_id = beat['id']
             budget = beat_budgets[beat_id]
-            candidates = selected_scenes.get(beat_id, [])
+            candidates = selected_scenes.get(str(beat_id), selected_scenes.get(beat_id, []))
+            if not isinstance(candidates, list):
+                raise ValueError(f"Candidates for beat {beat_id} must be a list")
             
             if not candidates:
                 logger.warning(f"No candidates for beat {beat_id}, skipping")
@@ -94,12 +112,17 @@ class TimelineConstructor:
                 used_shots=used_shots
             )
             
-            # Track used shots
-            for shot in beat_shots:
-                used_shots.add(shot['shot_id'])
-            
             timeline_shots.extend(beat_shots)
-            current_time += budget['duration']
+            if beat_shots:
+                current_time = beat_shots[-1]['timeline_end']
+
+        if not timeline_shots:
+            raise ValueError("No usable shots available to construct a timeline")
+        if current_time < self.target_duration - 0.01:
+            logger.warning(
+                "Selected unique shots produce %.1fs, below the %.1fs target",
+                current_time, self.target_duration
+            )
         
         # Step 3: Add transitions
         timeline_shots = self._add_transitions(timeline_shots, genre)
@@ -113,6 +136,8 @@ class TimelineConstructor:
             'shots': timeline_shots,
             'metadata': {
                 'beat_count': len(beats),
+                'represented_beat_count': len({s['beat_id'] for s in timeline_shots}),
+                'duration_shortfall': max(0.0, self.target_duration - current_time),
                 'pacing_profile': self._get_pacing_profile(timeline_shots)
             }
         }
@@ -138,6 +163,8 @@ class TimelineConstructor:
             duration, shot_count, and position values.
         """
         total_beats = len(beats)
+        if not total_beats:
+            raise ValueError("Cannot allocate a timeline without beats")
         budgets = {}
         
         # Base duration per beat
@@ -209,17 +236,33 @@ class TimelineConstructor:
         Returns:
             List of shot dictionaries with timeline assignments
         """
-        used_shots = used_shots or set()
+        if used_shots is None:
+            used_shots = set()
         shots = []
         shot_count = budget['shot_count']
         total_duration = budget['duration']
         
-        # Filter valid candidates (non-null paths and not already used)
-        valid_candidates = [
-            c for c in candidates
-            if c.get('shot_path') is not None  # Has valid shot file
-            and c['shot_id'] not in used_shots  # Not already used
-        ]
+        # Stage 14 may contain stale files, malformed ranges or repeated hits.
+        valid_candidates = []
+        seen = set(used_shots)
+        invalid_count = 0
+        for candidate in candidates:
+            normalized = self._valid_candidate(candidate)
+            if normalized is None:
+                invalid_count += 1
+                continue
+            identity = ('path', Path(normalized['shot_path']).resolve())
+            source_range = ('range', normalized['start_time'], normalized['end_time'])
+            if normalized['shot_id'] in seen or identity in seen or source_range in seen:
+                continue
+            seen.update((normalized['shot_id'], identity, source_range))
+            valid_candidates.append(normalized)
+
+        if invalid_count:
+            logger.warning(
+                "Beat %s: skipped %d candidates with invalid timing or missing/empty files",
+                beat['id'], invalid_count
+            )
         
         if not valid_candidates:
             logger.warning(
@@ -245,6 +288,20 @@ class TimelineConstructor:
             total_duration=total_duration,
             position=budget['position']
         )
+        # A short shot must not discard time that other selected shots can supply.
+        capacities = [c['duration'] for c in selected]
+        shot_durations = [min(d, cap) for d, cap in zip(shot_durations, capacities)]
+        remaining = min(total_duration, sum(capacities)) - sum(shot_durations)
+        while remaining > 1e-9:
+            expandable = [i for i, cap in enumerate(capacities)
+                          if cap - shot_durations[i] > 1e-9]
+            if not expandable:
+                break
+            share = remaining / len(expandable)
+            for i in expandable:
+                extra = min(share, capacities[i] - shot_durations[i])
+                shot_durations[i] += extra
+                remaining -= extra
         
         # Build shot entries
         current_time = start_time
@@ -274,6 +331,7 @@ class TimelineConstructor:
                 'timeline_duration': actual_duration,
                 'source_shot_start': candidate['start_time'],
                 'source_shot_end': candidate['end_time'],
+                'source_duration': source_duration,
                 'use_start_offset': use_start,
                 'use_end_offset': use_end,
                 'use_duration': actual_duration,
@@ -284,9 +342,38 @@ class TimelineConstructor:
             }
             
             shots.append(shot_entry)
+            used_shots.update((
+                candidate['shot_id'],
+                ('path', Path(candidate['shot_path']).resolve()),
+                ('range', candidate['start_time'], candidate['end_time'])
+            ))
             current_time += actual_duration
         
         return shots
+
+    @staticmethod
+    def _valid_candidate(candidate: Dict) -> Optional[Dict]:
+        """Validate retrieval metadata without trusting its declared duration."""
+        if not isinstance(candidate, dict):
+            return None
+        shot_id = candidate.get('shot_id')
+        path = candidate.get('shot_path')
+        if (isinstance(shot_id, bool) or not isinstance(shot_id, int) or shot_id < 0
+                or not isinstance(path, str) or not path.strip()):
+            return None
+        values = [candidate.get(key) for key in ('start_time', 'end_time', 'duration')]
+        if any(isinstance(v, bool) or not isinstance(v, (int, float))
+               or not math.isfinite(v) for v in values):
+            return None
+        start, end, duration = values
+        if start < 0 or end <= start or duration <= 0:
+            return None
+        try:
+            if not Path(path).is_file() or Path(path).stat().st_size == 0:
+                return None
+        except (OSError, ValueError):
+            return None
+        return {**candidate, 'duration': min(duration, end - start)}
     
     def _allocate_shot_durations(
         self,
@@ -311,17 +398,19 @@ class TimelineConstructor:
             List of durations in seconds for each shot, normalized to
             sum to total_duration.
         """
+        if shot_count <= 0 or total_duration <= 0:
+            raise ValueError("Shot count and duration must be positive")
         durations = []
         
         if position < 0.1:  # Opening
             # Single establishing shot
-            durations = [total_duration]
+            durations = [total_duration / shot_count] * shot_count
         
         elif position < 0.4:  # Setup
             # Descending durations (establish then tighten)
             base = total_duration / shot_count
             for i in range(shot_count):
-                factor = 1.3 - (i * 0.2)  # 1.3, 1.1, 0.9, 0.7...
+                factor = max(0.1, 1.3 - (i * 0.2))
                 durations.append(base * factor)
         
         elif position < 0.7:  # Montage/Escalation
@@ -332,12 +421,12 @@ class TimelineConstructor:
             # Accelerating (getting faster)
             base = total_duration / shot_count
             for i in range(shot_count):
-                factor = 1.2 - (i * 0.3)  # Gets shorter
+                factor = max(0.1, 1.2 - (i * 0.3))
                 durations.append(base * factor)
         
         else:  # Stinger
             # Single punchy shot
-            durations = [total_duration]
+            durations = [total_duration / shot_count] * shot_count
         
         # Normalize to exact total
         current_total = sum(durations)
@@ -431,9 +520,9 @@ class TimelineConstructor:
         durations = [s['timeline_duration'] for s in shots]
         
         return {
-            'avg_shot_duration': np.mean(durations),
-            'min_shot_duration': np.min(durations),
-            'max_shot_duration': np.max(durations),
+            'avg_shot_duration': sum(durations) / len(durations),
+            'min_shot_duration': min(durations),
+            'max_shot_duration': max(durations),
             'total_shots': len(shots),
             'shots_per_minute': len(shots) / (sum(durations) / 60.0)
         }

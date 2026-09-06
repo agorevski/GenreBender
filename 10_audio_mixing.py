@@ -14,7 +14,6 @@ from pipeline_common import (
     load_config, load_genre_profile
 )
 from trailer_generator.audio import AudioMixer
-from trailer_generator.narrative import AzureOpenAIClient
 
 def main():
     """Run the audio mixing pipeline stage.
@@ -73,12 +72,13 @@ def main():
             sys.exit(1)
     
     # Genre-specific output path
-    genre_output_dir = dirs.get('genre_base', dirs['output'])
+    genre_output_dir = dirs['genre_output']
     genre_output_dir.mkdir(parents=True, exist_ok=True)
     final_trailer_path = genre_output_dir / f'trailer_{args.genre}_final.mp4'
     
     # Check if already completed for this genre
-    if checkpoint.is_stage_completed('audio_mixing', args.genre) and not args.force:
+    if (checkpoint.is_stage_completed('audio_mixing', args.genre)
+            and final_trailer_path.is_file() and not args.force):
         logger.warning("⚠️  Audio mixing already completed. Use --force to re-run.")
         print("\n⚠️  This stage is already completed.")
         print(f"Final trailer: {final_trailer_path}")
@@ -94,7 +94,7 @@ def main():
     genre_profile = load_genre_profile(args.genre)
     
     # Load timeline
-    timeline_path = dirs['output'] / 'trailer_timeline.json'
+    timeline_path = genre_output_dir / 'trailer_timeline.json'
     if not timeline_path.exists():
         logger.error("Timeline not found. Run stage 15 first.")
         print("\n❌ Error: Timeline not found. Run 15_timeline_constructor.py first!")
@@ -107,10 +107,6 @@ def main():
     
     # Get assembled video (genre-specific path)
     assembled_video = genre_output_dir / f'trailer_{args.genre}_assembled.mp4'
-    if not assembled_video.exists():
-        # Fallback to old path
-        assembled_video = dirs['output'] / 'trailer_assembled.mp4'
-    
     if not assembled_video.exists():
         logger.error("Assembled video not found. Run stage 9 first.")
         print("\n❌ Error: Assembled video not found. Run 9_video_assembly.py first!")
@@ -126,6 +122,8 @@ def main():
     # Initialize Azure OpenAI client (if AI features enabled)
     azure_client = None
     if config.get('audio', {}).get('ai_music_selection', False):
+        from trailer_generator.narrative import AzureOpenAIClient
+
         try:
             azure_client = AzureOpenAIClient(
                 endpoint=config['azure_openai']['endpoint'],
@@ -146,7 +144,7 @@ def main():
     mixer = AudioMixer(
         config=config,
         genre_profile=genre_profile,
-        output_dir=output_base,
+        output_dir=genre_output_dir,
         azure_client=azure_client,
         enable_ducking=not args.no_ducking
     )
@@ -184,7 +182,7 @@ def main():
         checkpoint.mark_stage_completed('audio_mixing', {
             'output_file': str(final_trailer),
             'file_size_mb': round(file_size_mb, 2),
-            'duration': timeline.get('total_duration', 0)
+            'duration': timeline.get('actual_duration', timeline.get('total_duration', 0))
         }, genre=args.genre)
         
         # Print final completion
@@ -194,10 +192,10 @@ def main():
         print("✓ AUDIO MIXING COMPLETED")
         print("=" * 60)
         print(f"🎬 FINAL TRAILER: {final_trailer}")
-        print(f"Duration: {timeline.get('total_duration', 0):.1f}s")
+        print(f"Duration: {timeline.get('actual_duration', timeline.get('total_duration', 0)):.1f}s")
         print(f"File size: {file_size_mb:.1f} MB")
         print(f"Genre: {args.genre}")
-        print(f"\n✓ Pipeline Progress: {stats['completed_stages']}/{stats['total_stages']} stages (100%)")
+        print(f"\nPipeline Progress: {stats['completed_stages']}/{stats['total_stages']} stages ({stats['progress_percent']:.1f}%)")
         
         print("\n" + "=" * 60)
         print(f"🎉 TRAILER GENERATION COMPLETE FOR GENRE: {args.genre.upper()} 🎉")

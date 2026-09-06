@@ -18,6 +18,8 @@ import sys
 from pathlib import Path
 
 from pipeline_common import (
+    ALL_GENRES,
+    normalize_genre,
     setup_logging,
     load_config,
     get_output_base_dir,
@@ -26,7 +28,6 @@ from pipeline_common import (
     get_story_graph_dir
 )
 from trailer_generator.checkpoint import CheckpointManager
-from trailer_generator.retrieval.scene_retriever import retrieve_scenes
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +56,9 @@ def parse_args():
     )
     parser.add_argument(
         '--genre',
-        type=str,
+        type=normalize_genre,
         required=True,
-        choices=['comedy', 'horror', 'thriller', 'parody', 'mockumentary', 
-                 'crime', 'drama', 'experimental', 'fantasy', 'romance', 'scifi', 'action'],
+        choices=ALL_GENRES,
         help='Target trailer genre'
     )
     parser.add_argument(
@@ -159,6 +159,8 @@ def main():
         int: Exit code (0 for success, 1 for failure).
     """
     args = parse_args()
+
+    from trailer_generator.retrieval.scene_retriever import retrieve_scenes
     
     # Setup
     output_dir = get_output_base_dir(args.input)

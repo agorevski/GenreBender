@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Stage 8: Video Assembly & Color Grading
+Stage 9: Video Assembly & Color Grading
 Assembles final trailer video from timeline with genre-specific color grading and transitions.
 """
 
@@ -15,7 +15,6 @@ from pipeline_common import (
 )
 from trailer_generator.checkpoint import load_shots_from_metadata
 from trailer_generator.assembly import VideoAssembler
-from trailer_generator.narrative import AzureOpenAIClient
 
 def main():
     """Assemble final trailer video from timeline with genre-specific color grading.
@@ -73,7 +72,7 @@ def main():
             sys.exit(1)
     
     # Genre-specific output path
-    genre_output_dir = dirs.get('genre_base', dirs['output'])
+    genre_output_dir = dirs['genre_output']
     genre_output_dir.mkdir(parents=True, exist_ok=True)
     assembled_video_path = genre_output_dir / f'trailer_{args.genre}_assembled.mp4'
     
@@ -127,6 +126,8 @@ def main():
     if config.get('video', {}).get('ai_title_generation') or \
        config.get('video', {}).get('ai_transition_selection'):
         try:
+            from trailer_generator.narrative import AzureOpenAIClient
+
             azure_client = AzureOpenAIClient(
                 endpoint=config['azure_openai']['endpoint'],
                 api_key=config['azure_openai']['api_key'],
@@ -146,7 +147,7 @@ def main():
     assembler = VideoAssembler(
         config=config,
         genre_profile=genre_profile,
-        output_dir=output_base,
+        output_dir=genre_output_dir,
         enable_color_grading=not args.no_color_grade,
         enable_transitions=not args.no_transitions
     )

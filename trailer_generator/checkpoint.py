@@ -4,13 +4,34 @@ Allows resuming from any stage of the trailer generation pipeline.
 Supports both genre-agnostic stages (shared) and genre-dependent stages (per-genre).
 """
 
+from contextlib import contextmanager
+from copy import deepcopy
+from datetime import datetime
+import errno
 import json
 import logging
+import os
 from pathlib import Path
+import tempfile
+import threading
+import time
 from typing import Dict, List, Optional
-from datetime import datetime
+from weakref import WeakValueDictionary
+
+if os.name == 'nt':
+    import msvcrt
+else:
+    import fcntl
 
 logger = logging.getLogger(__name__)
+
+_THREAD_LOCKS = WeakValueDictionary()
+_THREAD_LOCKS_GUARD = threading.Lock()
+
+
+class CheckpointFormatError(ValueError):
+    """A checkpoint cannot be safely read or updated without manual recovery."""
+
 
 class CheckpointManager:
     """
@@ -54,29 +75,99 @@ class CheckpointManager:
         Args:
             checkpoint_path: Path to the checkpoint file for storing pipeline state.
         """
-        self.checkpoint_path = checkpoint_path
+        self.checkpoint_path = Path(checkpoint_path).resolve()
         self.checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
-        self.data = self._load()
+        self._lock_path = self.checkpoint_path.with_name(self.checkpoint_path.name + '.lock')
+        lock_key = os.path.normcase(str(self.checkpoint_path))
+        with _THREAD_LOCKS_GUARD:
+            self._thread_lock = _THREAD_LOCKS.setdefault(lock_key, threading.RLock())
+        self.reload()
+
+    @contextmanager
+    def _locked(self):
+        """Serialize threads and processes using a stable, never-deleted sidecar."""
+        with self._thread_lock:
+            with self._lock_path.open('a+b') as lock_file:
+                lock_file.seek(0, os.SEEK_END)
+                if lock_file.tell() == 0:
+                    lock_file.write(b'\0')
+                    lock_file.flush()
+                if os.name == 'nt':
+                    # LK_LOCK stops retrying after ten seconds. Poll the nonblocking
+                    # variant instead, so a busy writer cannot exhaust that limit.
+                    while True:
+                        lock_file.seek(0)
+                        try:
+                            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+                            break
+                        except OSError as error:
+                            if error.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                                raise
+                            time.sleep(0.05)
+                else:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                try:
+                    yield
+                finally:
+                    if os.name == 'nt':
+                        lock_file.seek(0)
+                        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
     
     def _load(self) -> Dict:
-        """Load checkpoint from disk.
+        """Read and validate under the sidecar lock; only a missing file is empty.
 
-        Returns:
-            Dict: The checkpoint data loaded from disk, or an empty checkpoint
-                structure if loading fails or file doesn't exist.
+        Malformed checkpoints raise CheckpointFormatError and remain untouched.
+        Filesystem errors propagate rather than discarding expensive progress.
         """
-        if self.checkpoint_path.exists():
-            try:
-                with open(self.checkpoint_path, 'r') as f:
-                    data = json.load(f)
-                logger.info(f"Loaded checkpoint from {self.checkpoint_path}")
-                # Migrate old checkpoint format if needed
-                data = self._migrate_checkpoint(data)
-                return data
-            except Exception as e:
-                logger.warning(f"Failed to load checkpoint: {e}")
-                return self._create_empty()
-        return self._create_empty()
+        try:
+            with self.checkpoint_path.open('r', encoding='utf-8') as stream:
+                data = json.load(stream)
+        except FileNotFoundError:
+            return self._create_empty()
+        except (json.JSONDecodeError, UnicodeDecodeError) as error:
+            raise CheckpointFormatError(
+                f"Invalid checkpoint {self.checkpoint_path}: {error}. "
+                "Back up and repair or remove the file before retrying."
+            ) from error
+        self._validate(data)
+        data = self._migrate_checkpoint(data)
+        for stage in self.STAGES:
+            data['stages'].setdefault(stage, {'completed': False})
+        return data
+
+    def _validate(self, data):
+        """Reject malformed state instead of interpreting it as unfinished work."""
+        def invalid(reason):
+            raise CheckpointFormatError(f"Invalid checkpoint {self.checkpoint_path}: {reason}")
+
+        if not isinstance(data, dict):
+            invalid("expected a JSON object")
+        version = data.get('version', '1.0')
+        if version not in ('1.0', '2.0'):
+            invalid(f"unsupported version {version!r}")
+        if not isinstance(data.get('stages'), dict):
+            invalid("'stages' must be an object")
+        if version == '2.0' or 'genre_stages' in data:
+            if not isinstance(data.get('genre_stages'), dict):
+                invalid("'genre_stages' must be an object")
+        for field in ('input_file', 'genre', 'last_completed_stage'):
+            if data.get(field) is not None and not isinstance(data[field], str):
+                invalid(f"'{field}' must be a string or null")
+
+        def validate_stages(stages):
+            for stage, record in stages.items():
+                if not isinstance(record, dict):
+                    invalid(f"stage {stage!r} must be an object")
+                if 'completed' in record and not isinstance(record['completed'], bool):
+                    invalid(f"stage {stage!r} completion must be a boolean")
+
+        validate_stages(data['stages'])
+        for genre, stages in data.get('genre_stages', {}).items():
+            if not isinstance(stages, dict):
+                invalid(f"stages for genre {genre!r} must be an object")
+            validate_stages(stages)
     
     def _migrate_checkpoint(self, data: Dict) -> Dict:
         """Migrate old checkpoint format to new format with per-genre support.
@@ -116,18 +207,71 @@ class CheckpointManager:
         }
     
     def save(self):
-        """Save checkpoint to disk.
+        """Persist local edits without replacing unrelated concurrent updates.
 
-        Updates the 'updated_at' timestamp and writes the checkpoint data
-        to the configured checkpoint path as JSON.
+        Only differences from the last loaded/saved snapshot are applied to the
+        latest disk state. Use reset/reset_genre for deliberate bulk clearing.
+        Direct edits to data require external synchronization if shared by threads.
         """
+        with self._locked():
+            latest = self._load()
+            self._apply_changes(latest, self._saved_data, self.data)
+            self._write(latest)
+            self._remember(latest)
+
+    @classmethod
+    def _apply_changes(cls, target, before, after):
+        """Apply a recursive local delta, including explicit deletions."""
+        for key in before.keys() - after.keys():
+            target.pop(key, None)
+        for key, value in after.items():
+            if key in before and value == before[key]:
+                continue
+            if isinstance(value, dict) and isinstance(before.get(key, {}), dict):
+                if not isinstance(target.get(key), dict):
+                    target[key] = {}
+                cls._apply_changes(target[key], before.get(key, {}), value)
+            else:
+                target[key] = deepcopy(value)
+
+    def _remember(self, data):
+        self._saved_data = deepcopy(data)
+        self.data = data
+
+    def _transaction(self, mutate):
+        with self._locked():
+            latest = self._load()
+            changed = mutate(latest) is not False
+            if changed:
+                self._write(latest)
+            self._remember(latest)
+            return changed
+
+    def _write(self, data):
+        """Flush a sibling file before atomic replacement; never truncate state."""
+        self._validate(data)
+        data['updated_at'] = datetime.now().isoformat()
+        pending_path = None
         try:
-            self.data['updated_at'] = datetime.now().isoformat()
-            with open(self.checkpoint_path, 'w') as f:
-                json.dump(self.data, f, indent=2)
+            with tempfile.NamedTemporaryFile(
+                mode='w', encoding='utf-8', dir=self.checkpoint_path.parent,
+                prefix=f'.{self.checkpoint_path.name}.', suffix='.tmp', delete=False,
+            ) as stream:
+                pending_path = Path(stream.name)
+                json.dump(data, stream, indent=2, allow_nan=False)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(pending_path, self.checkpoint_path)
+            if os.name != 'nt':
+                directory_fd = os.open(self.checkpoint_path.parent, os.O_RDONLY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
             logger.debug(f"Saved checkpoint to {self.checkpoint_path}")
-        except Exception as e:
-            logger.error(f"Failed to save checkpoint: {e}")
+        finally:
+            if pending_path is not None:
+                pending_path.unlink(missing_ok=True)
     
     def reload(self):
         """Reload checkpoint from disk to get latest state.
@@ -135,7 +279,8 @@ class CheckpointManager:
         Useful in parallel execution scenarios where the checkpoint file
         may have been updated by another process.
         """
-        self.data = self._load()
+        with self._locked():
+            self._remember(self._load())
         logger.debug(f"Reloaded checkpoint from {self.checkpoint_path}")
     
     def mark_stage_completed(self, stage: str, metadata: Optional[Dict] = None, genre: Optional[str] = None):
@@ -146,55 +291,27 @@ class CheckpointManager:
             metadata: Optional metadata about stage completion to store.
             genre: Genre for genre-dependent stages. Use None for genre-agnostic stages.
         """
-        # Determine if this is a genre-dependent stage
-        is_genre_dependent = stage in self.GENRE_DEPENDENT_STAGES
-        
-        if is_genre_dependent and genre:
-            # Per-genre completion
-            self._mark_genre_stage_completed(stage, genre, metadata)
-        else:
-            # Genre-agnostic or legacy completion
-            if stage not in self.STAGES:
-                logger.warning(f"Unknown stage: {stage}")
-                return
-            
-            self.data['stages'][stage]['completed'] = True
-            self.data['stages'][stage]['timestamp'] = datetime.now().isoformat()
-            
+        if stage not in self.STAGES:
+            logger.warning(f"Unknown stage: {stage}")
+            return
+
+        def complete(data):
+            if stage in self.GENRE_DEPENDENT_STAGES and genre:
+                record = data['genre_stages'].setdefault(genre.lower(), {}).setdefault(stage, {})
+            else:
+                record = data['stages'].setdefault(stage, {})
+                data['last_completed_stage'] = stage
+            record['completed'] = True
+            record['timestamp'] = datetime.now().isoformat()
             if metadata:
-                self.data['stages'][stage].update(metadata)
-            
-            self.data['last_completed_stage'] = stage
-        
-        self.save()
+                record.update(metadata)
+
+        self._transaction(complete)
         
         if genre:
             logger.info(f"✓ Checkpoint: Completed stage '{stage}' for genre '{genre}'")
         else:
             logger.info(f"✓ Checkpoint: Completed stage '{stage}'")
-    
-    def _mark_genre_stage_completed(self, stage: str, genre: str, metadata: Optional[Dict] = None):
-        """Mark a genre-dependent stage as completed for a specific genre.
-
-        Args:
-            stage: Name of the stage to mark as completed.
-            genre: Target genre (will be lowercased).
-            metadata: Optional metadata to store with the completion record.
-        """
-        genre = genre.lower()
-        
-        # Initialize genre section if needed
-        if genre not in self.data['genre_stages']:
-            self.data['genre_stages'][genre] = {}
-        
-        if stage not in self.data['genre_stages'][genre]:
-            self.data['genre_stages'][genre][stage] = {}
-        
-        self.data['genre_stages'][genre][stage]['completed'] = True
-        self.data['genre_stages'][genre][stage]['timestamp'] = datetime.now().isoformat()
-        
-        if metadata:
-            self.data['genre_stages'][genre][stage].update(metadata)
     
     def is_stage_completed(self, stage: str, genre: Optional[str] = None) -> bool:
         """Check if a stage is completed.
@@ -216,11 +333,7 @@ class CheckpointManager:
         if stage not in self.STAGES:
             return False
         
-        # Initialize stage if it doesn't exist in checkpoint data
-        if stage not in self.data['stages']:
-            self.data['stages'][stage] = {'completed': False}
-        
-        return self.data['stages'][stage].get('completed', False)
+        return self.data['stages'].get(stage, {}).get('completed', False)
     
     def _is_genre_stage_completed(self, stage: str, genre: str) -> bool:
         """Check if a genre-dependent stage is completed for a specific genre.
@@ -232,15 +345,8 @@ class CheckpointManager:
         Returns:
             bool: True if the stage is completed for this genre, False otherwise.
         """
-        genre = genre.lower()
-        
-        if genre not in self.data.get('genre_stages', {}):
-            return False
-        
-        if stage not in self.data['genre_stages'][genre]:
-            return False
-        
-        return self.data['genre_stages'][genre][stage].get('completed', False)
+        stages = self.data.get('genre_stages', {}).get(genre.lower(), {})
+        return stages.get(stage, {}).get('completed', False)
     
     def get_completed_genres(self, stage: str) -> List[str]:
         """Get list of genres that have completed a specific stage.
@@ -375,10 +481,12 @@ class CheckpointManager:
             input_file: Path to the input video file.
             genre: Trailer genre (optional for genre-agnostic stages).
         """
-        self.data['input_file'] = input_file
-        if genre:
-            self.data['genre'] = genre
-        self.save()
+        def update(data):
+            data['input_file'] = input_file
+            if genre:
+                data['genre'] = genre
+
+        self._transaction(update)
     
     def reset(self):
         """Reset checkpoint to empty state.
@@ -386,8 +494,11 @@ class CheckpointManager:
         Clears all checkpoint data and saves a fresh empty checkpoint
         to disk.
         """
-        self.data = self._create_empty()
-        self.save()
+        def clear(data):
+            data.clear()
+            data.update(self._create_empty())
+
+        self._transaction(clear)
         logger.info("Checkpoint reset")
     
     def reset_genre(self, genre: str):
@@ -400,9 +511,13 @@ class CheckpointManager:
             genre: Genre to reset (will be lowercased).
         """
         genre = genre.lower()
-        if genre in self.data.get('genre_stages', {}):
-            del self.data['genre_stages'][genre]
-            self.save()
+
+        def clear(data):
+            if genre not in data['genre_stages']:
+                return False
+            del data['genre_stages'][genre]
+
+        if self._transaction(clear):
             logger.info(f"Reset checkpoint for genre '{genre}'")
     
     def get_stats(self, genre: Optional[str] = None) -> Dict:

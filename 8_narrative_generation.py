@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from pipeline_common import (
-    initialize_stage, print_completion_message, add_common_arguments,
+    initialize_stage, print_completion_message, add_genre_arguments,
     load_config
 )
 from trailer_generator.narrative import AzureOpenAIClient, TimelineGenerator
@@ -29,7 +29,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Stage 7: Narrative Generation - Create trailer timeline with GPT-4'
     )
-    add_common_arguments(parser)
+    add_genre_arguments(parser)
     args = parser.parse_args()
     
     # Initialize

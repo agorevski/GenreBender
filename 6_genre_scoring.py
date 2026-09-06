@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from pipeline_common import (
-    initialize_stage, print_completion_message, add_common_arguments,
+    initialize_stage, print_completion_message, add_genre_arguments,
     load_config, load_genre_profile, load_shots_from_metadata, save_shots_to_metadata
 )
 from trailer_generator.analysis import GenreScorer
@@ -28,7 +28,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Stage 5: Genre Scoring - Score shots based on genre profile'
     )
-    add_common_arguments(parser)
+    add_genre_arguments(parser)
     args = parser.parse_args()
     
     # Initialize

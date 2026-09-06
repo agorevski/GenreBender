@@ -8,7 +8,10 @@ settings:
 
 # Available genres (for reference):
 # comedy, horror, thriller, parody, mockumentary, crime, drama, 
-# experimental, fantasy, romance, scifi, action
+# experimental, fantasy, romance, scifi, action, western, war, musical,
+# documentary, sports, mystery, historical, biographical, superhero,
+# dystopian, found_footage, kaiju, cyberpunk, mumblecore, kdrama
+# Source of truth: trailer_generator/config/genre_profiles.yaml
 
 movies:
   hitch:

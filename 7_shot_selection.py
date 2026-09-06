@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 from pipeline_common import (
-    initialize_stage, print_completion_message, add_common_arguments,
+    initialize_stage, print_completion_message, add_genre_arguments,
     load_config, load_shots_from_metadata
 )
 from trailer_generator.analysis import ShotSelector
@@ -30,7 +30,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Stage 6: Shot Selection - Select top shots for trailer'
     )
-    add_common_arguments(parser)
+    add_genre_arguments(parser)
     args = parser.parse_args()
     
     # Initialize
